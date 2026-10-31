@@ -10,7 +10,7 @@ import os
 import math
 from player import Shark
 from player_enhanced import SharkWithSprites
-from obstacle import CoralReef, Shipwreck
+from obstacle import OBSTACLE_TYPES
 from food import SmallFish
 from projectile import Laser, Missile, Torpedo
 from powerup import LaserPowerup, MissilePowerup, TorpedoPowerup, FriendlySubmarine, ShieldPowerup
@@ -22,6 +22,7 @@ from graphics_enhancements import (
 from settings_manager import SettingsManager
 from resources import resource_path
 from channel import ChannelDirector, BANK_DAMAGE, BANK_INVULN_MS, BANK_PUSH
+from hud import Hud
 
 # The simulation always advances in 60 Hz steps, so game speed doesn't depend on frame rate
 STEP_MS = 1000 / 60
@@ -285,6 +286,8 @@ def main():
     # Clear event queue and add a short delay to ensure splash screen is removed
     pygame.event.clear()
     pygame.time.wait(100)
+
+    hud = Hud()
 
     # Use enhanced shark with sprites if available, fallback to procedural
     try:
@@ -572,19 +575,13 @@ def main():
             spawn_timer += dt
             if spawn_timer > 1500:
                 spawn_timer = 0
-                choice = random.choice(['coral', 'shipwreck', 'fish', 'fish'])  # 50% fish, 50% obstacles
-                if choice == 'coral':
-                    spawn_x = channel.spawn_x(80, blocking=True)
+                if random.random() < 0.5:  # 50% fish, 50% whatever lives in this zone
+                    kind = OBSTACLE_TYPES[random.choice(channel.obstacle_kinds())]
+                    spawn_x = channel.spawn_x(kind.WIDTH, blocking=True, height=kind.HEIGHT)
                     if spawn_x is not None:
-                        coral = CoralReef(spawn_x, -24)
-                        obstacles.add(coral)
-                        all_sprites.add(coral)
-                elif choice == 'shipwreck':
-                    spawn_x = channel.spawn_x(90, blocking=True)
-                    if spawn_x is not None:
-                        wreck = Shipwreck(spawn_x, -28)
-                        obstacles.add(wreck)
-                        all_sprites.add(wreck)
+                        new_obstacles = kind.create(spawn_x)
+                        obstacles.add(new_obstacles)
+                        all_sprites.add(new_obstacles)
                 else:
                     fish = SmallFish(channel.spawn_x(26), -10)
                     foods.add(fish)
@@ -637,12 +634,13 @@ def main():
                     sprite.kill()
 
             # Collision detection
-            # Shark hits obstacle: lose a third of energy per hit
+            # Shark hits obstacle: how much it costs depends on the obstacle
+            blown_up = []
             hit = pygame.sprite.spritecollide(shark, obstacles, False, pixels_touch)
             if hit:
                 if shield_active and shield_strength > 0:
                     shield_activate_sound.play()  # Play shield sound when it blocks damage
-                    shield_strength -= 33  # Reduce shield by 1/3 per collision
+                    shield_strength -= sum(obstacle.damage for obstacle in hit)
                     print(f"Shield protected the shark! Shield strength: {shield_strength:.1f}")
                 
                     # Check if shield is depleted
@@ -663,8 +661,10 @@ def main():
                                                         [(100, 200, 255), (150, 220, 255), (200, 240, 255)], 25)
                         emitter.emit(obstacle.rect.center, color=(200,255,255), count=18, size=10, speed=5, lifetime=24)
                         obstacle.kill()
+                        if obstacle.blast_radius:
+                            blown_up.append(obstacle)
                 else:
-                    energy -= 33
+                    energy -= sum(obstacle.damage for obstacle in hit)
                 
                     # Play appropriate collision sound based on obstacle type
                     for obstacle in hit:
@@ -681,6 +681,8 @@ def main():
                     
                         print(f"Ouch! Shark hit an obstacle: {obstacle_name}. Energy: {energy:.1f}")
                         obstacle.kill()
+                        if obstacle.blast_radius:
+                            blown_up.append(obstacle)
                     
                         # Enhanced explosion effect
                         ParticleEffects.create_explosion(enhanced_particles, obstacle.rect.center,
@@ -741,83 +743,68 @@ def main():
             for shot in pygame.sprite.groupcollide(projectiles, banks, True, False, pixels_touch):
                 emitter.emit(shot.rect.midtop, color=(200,200,210), count=6, size=4, speed=3, lifetime=12)
 
-            # Laser hits coral reefs and shipwrecks: increment hit counter, break after 3 hits
-            for laser in [s for s in projectiles if isinstance(s, Laser)]:
-                obs_hit = pygame.sprite.spritecollide(laser, obstacles, False)
-                for obs in obs_hit:
-                    if hasattr(obs, 'hits'):
+            # Lasers wear an obstacle down; missiles and torpedoes destroy it outright
+            destroyed = []
+            for shot in pygame.sprite.groupcollide(projectiles, obstacles, False, False, pixels_touch).keys():
+                targets = pygame.sprite.spritecollide(shot, obstacles, False, pixels_touch)
+                if isinstance(shot, Laser):
+                    color = (255,200,0)
+                    for obs in targets:
                         obs.hits += 1
-                        laser.kill()
-                        if obs.hits >= 3:
-                            emitter.emit(obs.rect.center, color=(255,200,0), count=18, size=8, speed=4, lifetime=24)
-                            print(f"{getattr(obs, 'name', 'Obstacle')} destroyed by lasers!")
-                            obs_type = getattr(obs, 'name', type(obs).__name__)
-                            destroyed_counts[obs_type] = destroyed_counts.get(obs_type, 0) + 1
-                            if destroyed_counts[obs_type] >= 4 and not shield_active:
-                                px = channel.spawn_x(26)
-                                shield_powerup = ShieldPowerup(px, -16)
-                                powerups.add(shield_powerup)
-                                all_sprites.add(shield_powerup)
-                                destroyed_counts[obs_type] = 0
-                            obstacles_destroyed += 1
-                            if obstacles_destroyed >= 5 and not upgrade_active:
-                                upgrade_active = True
-                                upgrade_timer = 10000
-                                obstacles_destroyed = 0
-                                upgrade_activate_sound.play()
-                            obstacle_destroy_sound.play()
-                            obs.kill()
-                            score += 3
+                        emitter.emit(shot.rect.midtop, color=obs.debris_color, count=4, size=4, speed=3, lifetime=10)
+                        if obs.hits >= obs.toughness and obs not in destroyed:
+                            destroyed.append(obs)
+                else:
+                    color = (255,128,0) if isinstance(shot, Missile) else (0,255,255)
+                    for obs in targets:
+                        emitter.emit(obs.rect.center, color=color, count=24, size=10, speed=5, lifetime=28)
+                        if obs not in destroyed:
+                            destroyed.append(obs)
+                shot.kill()
 
-            # Missile hits any obstacle: destroy obstacle with one hit
-            for missile in [s for s in projectiles if isinstance(s, Missile)]:
-                obs_hit = pygame.sprite.spritecollide(missile, obstacles, False)
-                for obs in obs_hit:
-                    emitter.emit(obs.rect.center, color=(255,128,0), count=22, size=10, speed=5, lifetime=28)
-                    print(f"{getattr(obs, 'name', 'Obstacle')} destroyed by missile!")
-                    obs_type = getattr(obs, 'name', type(obs).__name__)
-                    destroyed_counts[obs_type] = destroyed_counts.get(obs_type, 0) + 1
-                    if destroyed_counts[obs_type] >= 4 and not shield_active:
+            # A mine's blast clears the obstacles around it, which can set off other mines.
+            # One the shark touched has already cost it energy, so its blast spares the shark.
+            queue = destroyed + blown_up
+            while queue:
+                obs = queue.pop(0)
+                obs.kill()
+                if obs.blast_radius:
+                    center = pygame.math.Vector2(obs.rect.center)
+                    ParticleEffects.create_explosion(enhanced_particles, obs.rect.center,
+                                                    [(255, 120, 30), (255, 210, 80), (255, 255, 200)], 45)
+                    for nearby in obstacles:
+                        if nearby not in destroyed and center.distance_to(nearby.rect.center) <= obs.blast_radius:
+                            destroyed.append(nearby)
+                            queue.append(nearby)
+                    if obs not in blown_up and center.distance_to(shark.rect.center) <= obs.blast_radius:
+                        if shield_active and shield_strength > 0:
+                            shield_strength -= obs.blast_damage
+                            if shield_strength <= 0:
+                                shield_active = False
+                                shield_strength = 0
+                        else:
+                            energy -= obs.blast_damage
+                            graphics_enhancer.trigger_damage_effect()
+                if obs in blown_up:
+                    continue
+                emitter.emit(obs.rect.center, color=obs.debris_color, count=18, size=8, speed=4, lifetime=24)
+                print(f"{obs.name} destroyed!")
+                obstacle_destroy_sound.play()
+                score += obs.reward
+                if obs.counts_for_rewards:
+                    destroyed_counts[obs.name] = destroyed_counts.get(obs.name, 0) + 1
+                    if destroyed_counts[obs.name] >= 4 and not shield_active:
                         px = channel.spawn_x(26)
                         shield_powerup = ShieldPowerup(px, -16)
                         powerups.add(shield_powerup)
                         all_sprites.add(shield_powerup)
-                        destroyed_counts[obs_type] = 0
+                        destroyed_counts[obs.name] = 0
                     obstacles_destroyed += 1
                     if obstacles_destroyed >= 5 and not upgrade_active:
                         upgrade_active = True
                         upgrade_timer = 10000
                         obstacles_destroyed = 0
                         upgrade_activate_sound.play()
-                    obstacle_destroy_sound.play()
-                    obs.kill()
-                    missile.kill()
-                    score += 3
-
-            # Torpedo hits any obstacle: destroy obstacle with one hit
-            for torpedo in [s for s in projectiles if isinstance(s, Torpedo)]:
-                obs_hit = pygame.sprite.spritecollide(torpedo, obstacles, False)
-                for obs in obs_hit:
-                    emitter.emit(obs.rect.center, color=(0,255,255), count=26, size=12, speed=6, lifetime=32)
-                    print(f"{getattr(obs, 'name', 'Obstacle')} destroyed by torpedo!")
-                    obs_type = getattr(obs, 'name', type(obs).__name__)
-                    destroyed_counts[obs_type] = destroyed_counts.get(obs_type, 0) + 1
-                    if destroyed_counts[obs_type] >= 4 and not shield_active:
-                        px = channel.spawn_x(26)
-                        shield_powerup = ShieldPowerup(px, -16)
-                        powerups.add(shield_powerup)
-                        all_sprites.add(shield_powerup)
-                        destroyed_counts[obs_type] = 0
-                    obstacles_destroyed += 1
-                    if obstacles_destroyed >= 5 and not upgrade_active:
-                        upgrade_active = True
-                        upgrade_timer = 10000
-                        obstacles_destroyed = 0
-                        upgrade_activate_sound.play()
-                    obstacle_destroy_sound.play()
-                    obs.kill()
-                    torpedo.kill()
-                    score += 3
 
             # Shark eats food: remove food and gain energy
             eaten = pygame.sprite.spritecollide(shark, foods, True)
@@ -885,28 +872,7 @@ def main():
         # Blink a ring around the shark while it can't be hurt by the coastline
         if bank_invuln > 0 and int(bank_invuln / 100) % 2:
             pygame.draw.circle(screen, (255, 255, 255), shark.rect.center, 62, 2)
-        # Draw energy bar
-        pygame.draw.rect(screen, (0, 200, 0), (20, 20, int(energy * 3), 20))
-        pygame.draw.rect(screen, (255, 255, 255), (20, 20, 300, 20), 2)
-        energy_text = font.render(f"Energy", True, (255, 255, 255))
-        screen.blit(energy_text, (330, 16))
-        # Draw shield status and strength bar
-        shield_bar_y = 80
         if shield_active and shield_strength > 0:
-            # Active shield with strength bar
-            shield_text = font.render("Shield", True, (0, 255, 128))
-            screen.blit(shield_text, (20, shield_bar_y))
-            
-            # Shield strength bar (similar to energy bar)
-            shield_width = int(shield_strength * 2)  # 200px max width
-            shield_color = (0, 255, 128) if shield_strength > 66 else (255, 255, 0) if shield_strength > 33 else (255, 128, 0)
-            pygame.draw.rect(screen, shield_color, (20, shield_bar_y + 25, shield_width, 15))
-            pygame.draw.rect(screen, (255, 255, 255), (20, shield_bar_y + 25, 200, 15), 2)  # Border
-            
-            # Shield strength text
-            strength_text = font.render(f"{int(shield_strength)}", True, (255, 255, 255))
-            screen.blit(strength_text, (230, shield_bar_y + 21))
-            
             # Draw white arc directly in front of the shark's mouth
             arc_width = 80
             arc_height = 60
@@ -914,40 +880,8 @@ def main():
             arc_y = shark.rect.centery - arc_height // 2 - 30  # Move arc up to align with mouth
             arc_rect = pygame.Rect(arc_x, arc_y, arc_width, arc_height)
             pygame.draw.arc(screen, (255,255,255), arc_rect, 0.57, 2.57, 6)
-        else:
-            # Inactive/no shield - greyed out bar
-            shield_text = font.render("Shield", True, (100, 100, 100))
-            screen.blit(shield_text, (20, shield_bar_y))
-            
-            # Greyed out empty bar
-            pygame.draw.rect(screen, (50, 50, 50), (20, shield_bar_y + 25, 200, 15))
-            pygame.draw.rect(screen, (100, 100, 100), (20, shield_bar_y + 25, 200, 15), 2)  # Border
-            
-            # "INACTIVE" text
-            inactive_text = font.render("INACTIVE", True, (100, 100, 100))
-            screen.blit(inactive_text, (230, shield_bar_y + 21))
-        # Draw laser power bar (moved down to accommodate shield bar)
-        laser_bar_y = 125
-        pygame.draw.rect(screen, (255, 0, 0), (20, laser_bar_y, int(shark.laser_energy * 3), 14))
-        pygame.draw.rect(screen, (255, 255, 255), (20, laser_bar_y, 300, 14), 1)
-        laser_text = font.render("Laser", True, (255, 0, 0))
-        screen.blit(laser_text, (330, laser_bar_y - 4))
-        # Draw missile inventory (max 3)
-        for i in range(3):
-            color = (255, 128, 0) if i < min(shark.missiles, 3) else (80, 40, 0)
-            pygame.draw.rect(screen, color, (420 + i*28, 20, 18, 18))
-            pygame.draw.rect(screen, (255, 255, 255), (420 + i*28, 20, 18, 18), 2)
-        missile_text = font.render("Missiles", True, (255, 128, 0))
-        screen.blit(missile_text, (420, 44))
-        # Draw torpedo inventory (max 3)
-        for i in range(3):
-            color = (0, 255, 255) if i < min(shark.torpedoes, 3) else (0, 64, 64)
-            pygame.draw.ellipse(screen, color, (540 + i*28, 20, 18, 18))
-            pygame.draw.ellipse(screen, (255, 255, 255), (540 + i*28, 20, 18, 18), 2)
-        torpedo_text = font.render("Torpedoes", True, (0, 255, 255))
-        screen.blit(torpedo_text, (540, 44))
-        score_text = font.render(f"Score: {score}", True, (255, 255, 0))
-        screen.blit(score_text, (660, 20))
+        hud.draw(screen, shark.rect, energy, shield_strength if shield_active else 0, shark.laser_energy,
+                 upgrade_active, shark.missiles, shark.torpedoes, score, pygame.time.get_ticks())
 
         # Apply post-processing effects
         graphics_enhancer.render_effects()

@@ -80,7 +80,7 @@ def test_chunks_join_without_gaps():
 
 def test_bank_collision_shape_matches_the_coastline(display):
     left, right = ch.ChannelChunk([(200, 600, 'pass')] * 7).build()
-    assert left.rect.right == 200 and right.rect.left == 600
+    assert left.rect.right == 200 + ch.ART_OVERHANG and right.rect.left == 600 - ch.ART_OVERHANG
     assert left.mask.get_at((190, 24)) and right.mask.get_at((10, 24))
 
 
@@ -272,3 +272,23 @@ def test_steering_bot_follows_every_zone_unharmed(play, monkeypatch, seed):
     play(script, max_frames=9000)
     assert seen['zones'] == set(ch.ZONES)
     assert not seen['hit']
+
+
+def test_coral_art_covers_the_hit_shape_and_reaches_past_it():
+    left, right = ch.ChannelChunk([(200, 600, 'pass')] * 7).build()
+    for bank in (left, right):
+        for y in range(ch.CHUNK_H):
+            for x in range(bank.rect.width):
+                if bank.mask.get_at((x, y)):
+                    assert bank.image.get_at((x, y)).a == 255
+    assert left.rect.right == 200 + ch.ART_OVERHANG
+    assert right.rect.left == 600 - ch.ART_OVERHANG
+
+
+def test_reef_rows_line_up_across_chunk_joins():
+    director = ch.ChannelDirector(random.Random(3))
+    lower = director._next_chunk(0)
+    upper = director._next_chunk(0)
+    assert upper.world_y == lower.world_y + ch.CHUNK_H
+    assert upper.samples[0] == lower.samples[-1]
+    assert upper.colors[0] == lower.colors[1]

@@ -6,23 +6,33 @@ import random
 
 import pygame
 
+from coral import ART_OVERHANG, lerp_color, paint_reef, scatter_pieces
+
 # --- Tuning: adjust these while playtesting ---
 ZONES = {
-    'lagoon': {'width': (450, 550), 'length': (1500, 2500), 'bend': (400, 800),
-               'next': ['pass'], 'bank_color': (112, 98, 74)},
-    'pass': {'width': (220, 280), 'length': (900, 1600), 'bend': (240, 520),
-             'next': ['lagoon', 'dropoff'], 'bank_color': (58, 62, 74)},
+    'lagoon': {'width': (500, 600), 'length': (1500, 2500), 'bend': (400, 800),
+               'next': ['pass'], 'decor': ['brain', 'staghorn', 'anemone'],
+               'obstacles': ['coral', 'coral', 'coral', 'wreck', 'jellyfish'],
+               # Reef colours, from the water's edge out to the deepest, furthest part
+               'reef': [(216, 196, 148), (178, 132, 106), (126, 104, 108), (72, 90, 114), (42, 68, 102)]},
+    'pass': {'width': (380, 460), 'length': (900, 1600), 'bend': (240, 520),
+             'next': ['lagoon', 'dropoff'], 'decor': ['table', 'fan', 'brain', 'staghorn'],
+             'obstacles': ['coral', 'coral', 'mine', 'mine', 'jellyfish'],
+             'reef': [(150, 158, 150), (120, 84, 112), (86, 74, 106), (54, 66, 98), (34, 50, 84)]},
     'dropoff': {'width': (560, 620), 'length': (1000, 1800), 'bend': (400, 800),
-                'next': ['pass'], 'bank_color': (30, 40, 62), 'open_side': True},
+                'next': ['pass'], 'decor': ['fan', 'table'], 'open_side': True,
+                'obstacles': ['wreck', 'wreck', 'mine', 'jellyfish', 'jellyfish'],
+                'reef': [(92, 120, 138), (58, 76, 106), (40, 54, 88), (28, 40, 72), (18, 28, 56)]},
 }
-NARROWEST_PASS = 180  # Reached at high scores
-PASS_NARROWS_PER_SCORE = 0.2
+NARROWEST_PASS = 220  # Reached at a score of 400
+PASS_NARROWS_PER_SCORE = 0.4
 OBSTACLE_PASS_ROOM = 110  # Open width needed on one side of an obstacle, bends included
 COAST_ROUGHNESS = 4  # px the coastline wanders from its smooth line
 BANK_DAMAGE = 12
 BANK_INVULN_MS = 1000
 BANK_PUSH = 10  # px per step, faster than the shark can swim back
 ROUTE_SAFETY = 0.8  # Share of the theoretical limits a bend may use
+REEF_COLOR_BLEND = 0.12  # How far the reef's colours move towards the current zone's per chunk
 
 # --- Facts about the game that limit what's fair ---
 SCREEN_W = 800
@@ -136,44 +146,36 @@ class ChannelGenerator:
 class CoastBank(pygame.sprite.Sprite):
     """A slice of indestructible coastline. Knows the channel's centre, to push the shark there."""
 
-    def __init__(self, edges, is_left, channel_center, zone, y, rng=random):
+    def __init__(self, edges, is_left, channel_center, zone, y, world_y, colors, rng=random):
         """edges holds this bank's x position at each sample, from the chunk's bottom to its top."""
         super().__init__()
         y_at = [CHUNK_H - i * SAMPLE_SPACING for i in range(len(edges))]
         inner_most = max(edges) if is_left else min(edges)
-        x_offset = 0 if is_left else inner_most
-        width = inner_most if is_left else SCREEN_W - inner_most
+        # The image is wider than the hit shape, to leave room for coral tips
+        x_offset = 0 if is_left else inner_most - ART_OVERHANG
+        width = inner_most + ART_OVERHANG if is_left else SCREEN_W - x_offset
         self.image = pygame.Surface((max(1, width), CHUNK_H), pygame.SRCALPHA)
         coast = [(edge - x_offset, y_pos) for edge, y_pos in zip(edges, y_at)]
         outer_x = 0 if is_left else width
-        pygame.draw.polygon(self.image, ZONES[zone]['bank_color'],
+        hit_shape = pygame.Surface(self.image.get_size(), pygame.SRCALPHA)
+        pygame.draw.polygon(hit_shape, (255, 255, 255),
                             coast + [(outer_x, y_at[-1]), (outer_x, y_at[0])])
-        self.mask = pygame.mask.from_surface(self.image)
-        self._add_detail(coast, is_left, rng)
+        self.mask = pygame.mask.from_surface(hit_shape)
+        paint_reef(self.image, edges, is_left, x_offset, world_y, colors[0], colors[1], CHUNK_H)
+        scatter_pieces(self.image, edges, is_left, x_offset, ZONES[zone]['decor'], rng, CHUNK_H)
         self.rect = self.image.get_rect(topleft=(x_offset, y))
         self.channel_center = channel_center
-
-    def _add_detail(self, coast, is_left, rng):
-        inward = -1 if is_left else 1
-        for _ in range(max(1, self.image.get_width() // 14)):
-            x, y = rng.randint(0, self.image.get_width() - 1), rng.randint(4, CHUNK_H - 4)
-            if self.mask.get_at((x, y)):
-                pygame.draw.circle(self.image, rng.choice([(46, 50, 60), (72, 78, 90), (40, 42, 52)]),
-                                   (x, y), rng.randint(2, 5))
-        pygame.draw.lines(self.image, (34, 36, 46), False,
-                          [(x + inward * 9, y) for x, y in coast], 6)
-        pygame.draw.lines(self.image, (150, 132, 92), False, coast, 4)
-        # Detail may spill past the coastline; collisions use the clean shape, so trim the drawing
-        trim = self.mask.to_surface(setcolor=(255, 255, 255, 255), unsetcolor=(0, 0, 0, 0))
-        self.image.blit(trim, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
 
 
 class ChannelChunk:
     """One screen-wide slice of the channel."""
 
-    def __init__(self, samples, rng=random):
+    def __init__(self, samples, rng=random, world_y=0, colors=None):
         self.samples = samples
         self.rng = rng
+        self.world_y = world_y
+        reef = ZONES[self.zone]['reef']
+        self.colors = colors or (reef, reef)
 
     @property
     def zone(self):
@@ -190,9 +192,11 @@ class ChannelChunk:
         rights = [right for _, right, _ in self.samples]
         banks = []
         if max(lefts) > 0:
-            banks.append(CoastBank(lefts, True, self.channel_center, self.zone, y, self.rng))
+            banks.append(CoastBank(lefts, True, self.channel_center, self.zone, y,
+                                   self.world_y, self.colors, self.rng))
         if min(rights) < SCREEN_W:
-            banks.append(CoastBank(rights, False, self.channel_center, self.zone, y, self.rng))
+            banks.append(CoastBank(rights, False, self.channel_center, self.zone, y,
+                                   self.world_y, self.colors, self.rng))
         return banks
 
 
@@ -206,6 +210,8 @@ class ChannelDirector:
         self.last_sample = None
         self.recent = []
         self.score = 0
+        self.world_y = 0
+        self.reef_colors = ZONES['lagoon']['reef']
 
     @property
     def zone(self):
@@ -217,7 +223,12 @@ class ChannelDirector:
         self.last_sample = samples[-1]
         self.score = score
         self.recent = (self.recent + samples[1:])[-SPAWN_SAMPLES_BELOW:]
-        return ChannelChunk(samples, self.rng)
+        previous = self.reef_colors
+        target = ZONES[self.zone]['reef']
+        self.reef_colors = [lerp_color(now, goal, REEF_COLOR_BLEND) for now, goal in zip(previous, target)]
+        chunk = ChannelChunk(samples, self.rng, self.world_y, (previous, self.reef_colors))
+        self.world_y += CHUNK_H
+        return chunk
 
     def prefill(self):
         """Return (chunk, y) pairs covering the screen at the start of a run."""
@@ -234,13 +245,18 @@ class ChannelDirector:
         self.distance -= CHUNK_H
         return self._next_chunk(score)
 
-    def spawn_x(self, width, blocking=False):
+    def obstacle_kinds(self):
+        return ZONES[self.zone]['obstacles']
+
+    def spawn_x(self, width, blocking=False, height=0):
         """Pick an x inside the channel at the top of the screen.
 
         A blocking sprite always leaves one side wide enough to swim past, or returns None
         if it can't. Anything else always gets a position, however sharp the bend.
+        height is how far above the top of the screen the sprite starts.
         """
-        window = self.recent + self.generator.peek(SPAWN_SAMPLES_ABOVE, self.score)
+        ahead = SPAWN_SAMPLES_ABOVE + height // SAMPLE_SPACING + 1
+        window = self.recent + self.generator.peek(ahead, self.score)
         left = max(0, max(sample[0] for sample in window))
         right = min(SCREEN_W, min(sample[1] for sample in window))
         low = left + width // 2 + SPAWN_PADDING

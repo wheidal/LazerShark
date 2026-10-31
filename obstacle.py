@@ -6,159 +6,229 @@ import random
 import math
 
 
+SHADOW_OFFSET = (4, 5)
+OUTLINE = (14, 22, 34)
+_art_cache = {}
+
+
+def _finish(art, outline=True):
+	"""Outline a drawing so it reads as a hazard, and lay a soft shadow on the seabed beneath it."""
+	mask = pygame.mask.from_surface(art)
+	w, h = art.get_size()
+	done = pygame.Surface((w + SHADOW_OFFSET[0], h + SHADOW_OFFSET[1]), pygame.SRCALPHA)
+	# Too faint to count in the hit shape, which is taken from solid pixels only
+	shadow = mask.to_surface(setcolor=(4, 14, 30, 90), unsetcolor=(0, 0, 0, 0))
+	done.blit(shadow, SHADOW_OFFSET)
+	done.blit(art, (0, 0))
+	if outline:
+		for part in mask.connected_components():
+			points = part.outline()
+			if len(points) > 2:
+				pygame.draw.lines(done, OUTLINE, True, points, 2)
+	return done
+
+
+def _cached(key, make):
+	"""Art is drawn once and shared: obstacles appear too often to draw each one fresh."""
+	if key not in _art_cache:
+		_art_cache[key] = make()
+	return _art_cache[key]
+
+
+def _coral_head(variant):
+	rng = random.Random(variant)
+	art = pygame.Surface((78, 62), pygame.SRCALPHA)
+	base = [(232, 120, 96), (238, 164, 84), (206, 110, 164)][variant]
+	lobes = [(rng.randint(22, 56), rng.randint(19, 43), rng.randint(11, 18)) for _ in range(6 + variant)]
+	for x, y, radius in lobes:
+		pygame.draw.circle(art, tuple(int(c * 0.62) for c in base), (x, y), radius)
+	for x, y, radius in lobes:
+		pygame.draw.circle(art, base, (x - 1, y - 1), radius - 3)
+		pygame.draw.circle(art, tuple(min(255, c + 40) for c in base), (x - 3, y - 3), radius // 2)
+		# Polyps dot the top of each lobe
+		for _ in range(radius):
+			angle, reach = rng.uniform(0, math.tau), rng.uniform(0, radius - 4)
+			pygame.draw.circle(art, (255, 238, 205),
+				(x + math.cos(angle) * reach, y + math.sin(angle) * reach), 1)
+	return _finish(art)
+
+
 class CoralReef(pygame.sprite.Sprite):
+	"""A coral head growing up from the seabed, seen from above."""
+	WIDTH, HEIGHT = 82, 67
+	kind = 'coral'
+	name = "Coral Reef"
+	toughness = 3
+	damage = 33
+	reward = 3
+	counts_for_rewards = True
+	blast_radius = 0
+	debris_color = (238, 150, 110)
+
 	def __init__(self, x, y):
 		super().__init__()
-		w, h = 80, 44
-		self.image = pygame.Surface((w, h), pygame.SRCALPHA)
-
-		# ── Seabed base ──────────────────────────────────────────────────────
-		pygame.draw.ellipse(self.image, (145, 118, 72), (0, h - 14, w, 14))
-		pygame.draw.ellipse(self.image, (170, 140, 88), (2, h - 14, w - 4, 9))
-
-		# ── Brain coral (left) ───────────────────────────────────────────────
-		# Outer dome (shadow)
-		pygame.draw.ellipse(self.image, (175, 108, 62), (2, 18, 28, 20))
-		# Main dome
-		pygame.draw.ellipse(self.image, (212, 138, 82), (3, 16, 26, 18))
-		# Convolution bumps
-		for bx, by in [(8, 22), (13, 17), (18, 22), (11, 27), (17, 27), (7, 30)]:
-			pygame.draw.circle(self.image, (232, 158, 98), (bx, by), 4)
-			pygame.draw.circle(self.image, (188, 112, 62), (bx, by), 4, 1)
-		# Top specular
-		pygame.draw.ellipse(self.image, (245, 180, 120), (7, 17, 11, 6))
-
-		# ── Staghorn coral (centre) ──────────────────────────────────────────
-		trunk  = (228, 208, 172)
-		shadow = (182, 158, 122)
-		tip    = (255, 248, 232)
-		# Trunk
-		pygame.draw.line(self.image, shadow, (41, h - 14), (40, 20), 4)
-		pygame.draw.line(self.image, trunk,  (40, h - 14), (39, 20), 3)
-		# Left main branch
-		pygame.draw.line(self.image, shadow, (40, 24), (27, 8), 3)
-		pygame.draw.line(self.image, trunk,  (39, 24), (26, 8), 2)
-		pygame.draw.circle(self.image, tip, (25, 7), 3)
-		# Left sub-branch
-		pygame.draw.line(self.image, trunk, (34, 16), (22, 6), 2)
-		pygame.draw.circle(self.image, tip, (21, 5), 2)
-		# Right main branch
-		pygame.draw.line(self.image, shadow, (40, 22), (54, 6), 3)
-		pygame.draw.line(self.image, trunk,  (39, 22), (53, 6), 2)
-		pygame.draw.circle(self.image, tip, (53, 5), 3)
-		# Right sub-branch
-		pygame.draw.line(self.image, trunk, (46, 15), (58, 4), 2)
-		pygame.draw.circle(self.image, tip, (58, 3), 2)
-		# Trunk tip
-		pygame.draw.circle(self.image, tip, (39, 19), 3)
-
-		# ── Boulder coral (right) ────────────────────────────────────────────
-		pygame.draw.ellipse(self.image, (225, 118, 46), (52, 20, 26, 18))
-		pygame.draw.ellipse(self.image, (252, 148, 68), (53, 18, 24, 16))
-		pygame.draw.ellipse(self.image, (255, 188, 112), (56, 19, 14, 8))
-		# Surface convolution arcs
-		pygame.draw.arc(self.image, (200, 98, 36), (54, 22, 14, 8), 0, math.pi, 1)
-		pygame.draw.arc(self.image, (200, 98, 36), (56, 28, 10, 6), 0, math.pi, 1)
-
-		# ── Sea anemones along base ───────────────────────────────────────────
-		for ax, ay in [(14, h - 9), (30, h - 8), (48, h - 10), (62, h - 9), (74, h - 8)]:
-			for j in range(6):
-				angle = j * 60
-				tx = ax + int(4 * math.cos(math.radians(angle)))
-				ty = ay + int(4 * math.sin(math.radians(angle)))
-				pygame.draw.line(self.image, (255, 100, 148), (ax, ay), (tx, ty), 1)
-			pygame.draw.circle(self.image, (255, 168, 192), (ax, ay), 2)
-
-		# ── Scattered polyp dots ──────────────────────────────────────────────
-		for _ in range(14):
-			px = random.randint(2, w - 2)
-			py = random.randint(h - 13, h - 3)
-			c  = random.choice([(255, 178, 78), (255, 118, 58), (182, 242, 182)])
-			pygame.draw.circle(self.image, c, (px, py), 1)
-
+		variant = random.randrange(3)
+		self.image = _cached(('coral', variant), lambda: _coral_head(variant))
+		self.mask = pygame.mask.from_surface(self.image, 127)
 		self.rect = self.image.get_rect(midtop=(x, y))
 		self.hits = 0
-		self.name = "Coral Reef"
+
+	@classmethod
+	def create(cls, x):
+		"""The sprites for one spawn, placed just above the top of the screen."""
+		return [cls(x, -cls.HEIGHT)]
+
+
+def _wreck(angle):
+	rng = random.Random(angle)
+	art = pygame.Surface((64, 146), pygame.SRCALPHA)
+	hull = [(32, 0), (50, 22), (60, 56), (60, 118), (50, 142), (14, 142), (4, 118), (4, 56), (14, 22)]
+	deck = [(32, 10), (45, 28), (52, 58), (52, 114), (45, 134), (19, 134), (12, 114), (12, 58), (19, 28)]
+	pygame.draw.polygon(art, (84, 54, 42), hull)
+	pygame.draw.polygon(art, (146, 104, 70), deck)
+	for y in range(30, 132, 8):  # Deck planks
+		pygame.draw.line(art, (112, 78, 54), (14, y), (50, y))
+	# Superstructure, with the deck stove in behind it
+	pygame.draw.rect(art, (108, 112, 104), (21, 48, 22, 28), border_radius=3)
+	pygame.draw.rect(art, (64, 70, 72), (25, 53, 14, 9))
+	pygame.draw.polygon(art, (22, 26, 34), [(22, 92), (40, 86), (46, 104), (32, 118), (18, 108)])
+	# Rust and weed have taken over the old ship
+	for _ in range(22):
+		pos = (rng.randint(8, 56), rng.randint(20, 136))
+		if art.get_at(pos).a:
+			color = rng.choice([(164, 86, 44), (74, 122, 78), (96, 138, 86)])
+			pygame.draw.circle(art, color, pos, rng.randint(1, 3))
+	art = pygame.transform.rotate(art, angle)
+	return _finish(art)
 
 
 class Shipwreck(pygame.sprite.Sprite):
+	"""A long hull lying on the seabed. Tough, and takes up more of the channel than coral."""
+	WIDTH, HEIGHT = 96, 164
+	kind = 'wreck'
+	name = "Shipwreck"
+	toughness = 5
+	damage = 33
+	reward = 5
+	counts_for_rewards = True
+	blast_radius = 0
+	debris_color = (170, 120, 80)
+
 	def __init__(self, x, y):
 		super().__init__()
-		w, h = 90, 46
-		self.image = pygame.Surface((w, h), pygame.SRCALPHA)
-
-		# ── Sandy sediment base ───────────────────────────────────────────────
-		pygame.draw.ellipse(self.image, (158, 132, 85), (4, h - 12, w - 8, 12))
-		pygame.draw.ellipse(self.image, (180, 152, 102), (4, h - 12, w - 8, 7))
-
-		# ── Hull (layered for depth) ──────────────────────────────────────────
-		hull_shadow = [(10, 12), (80, 12), (86, 28), (75, h - 12), (15, h - 12), (4, 28)]
-		hull_main   = [(11, 11), (79, 11), (85, 27), (74, h - 13), (16, h - 13), (5, 27)]
-		hull_top    = [(11, 11), (79, 11), (83, 20), (7, 20)]
-		pygame.draw.polygon(self.image, (65, 38, 13), hull_shadow)
-		pygame.draw.polygon(self.image, (96, 58, 20), hull_main)
-		pygame.draw.polygon(self.image, (130, 82, 32), hull_top)
-
-		# ── Waterline band ────────────────────────────────────────────────────
-		pygame.draw.line(self.image, (52, 74, 44), (10, 21), (80, 21), 2)
-
-		# ── Portholes ─────────────────────────────────────────────────────────
-		for px in [26, 45, 64]:
-			pygame.draw.circle(self.image, (32, 18, 6),  (px, 30), 5)   # surround
-			pygame.draw.circle(self.image, (16, 8,  2),  (px, 30), 3)   # dark interior
-			pygame.draw.circle(self.image, (56, 36, 14), (px, 30), 5, 1) # rim
-			pygame.draw.circle(self.image, (76, 98, 118), (px - 1, 28), 2) # glass glint
-
-		# ── Superstructure (cabin) ────────────────────────────────────────────
-		pygame.draw.rect(self.image, (78, 48, 16), (28, 5, 34, 9))
-		pygame.draw.rect(self.image, (106, 66, 26), (29, 4, 32, 7))
-		pygame.draw.rect(self.image, (130, 88, 40), (30, 4, 22, 3))
-		for wx in [33, 42, 51]:
-			pygame.draw.rect(self.image, (16, 8,  2),  (wx, 6, 4, 4))  # window dark
-			pygame.draw.rect(self.image, (58, 80, 100), (wx, 6, 3, 3)) # window glint
-
-		# ── Broken mast ───────────────────────────────────────────────────────
-		pygame.draw.line(self.image, (70, 44, 15), (48, 4), (55, -2), 3)
-		pygame.draw.line(self.image, (94, 60, 24), (47, 4), (54, -2), 2)
-		# Fallen spar
-		pygame.draw.line(self.image, (70, 44, 15), (32, 8), (50, 4), 2)
-
-		# ── Rust streaks ─────────────────────────────────────────────────────
-		for rx, ry in [(22, 12), (44, 12), (66, 12), (33, 21), (57, 21)]:
-			pygame.draw.line(self.image, (162, 80, 22, 108),
-							 (rx, ry), (rx + random.randint(-1, 1), ry + 9), 2)
-
-		# ── Hull damage holes ─────────────────────────────────────────────────
-		for hx, hy, hr in [(20, 30, 4), (56, 34, 3), (74, 27, 3)]:
-			pygame.draw.circle(self.image, (26, 14, 4), (hx, hy), hr)
-			pygame.draw.circle(self.image, (10, 4,  1), (hx, hy), hr - 1)
-			pygame.draw.circle(self.image, (56, 34, 12), (hx, hy), hr, 1)
-
-		# ── Structural cracks ─────────────────────────────────────────────────
-		pygame.draw.line(self.image, (46, 26, 7), (34, 12), (38, 29), 1)
-		pygame.draw.line(self.image, (46, 26, 7), (60, 12), (56, 30), 1)
-
-		# ── Barnacles ────────────────────────────────────────────────────────
-		for _ in range(14):
-			bx = random.randint(10, 82)
-			by = random.randint(24, h - 14)
-			pygame.draw.circle(self.image, (176, 172, 154), (bx, by), 2)
-			pygame.draw.circle(self.image, (146, 142, 126), (bx, by), 1)
-
-		# ── Algae growth ──────────────────────────────────────────────────────
-		for gx in [12, 22, 52, 70, 82]:
-			gh = random.randint(5, 11)
-			pygame.draw.line(self.image, (42, 88, 38),
-							 (gx, h - 12), (gx + random.randint(-2, 2), h - 12 - gh), 2)
-
-		# ── Hull rivets ───────────────────────────────────────────────────────
-		for rx in range(18, 78, 12):
-			pygame.draw.circle(self.image, (70, 42, 14), (rx, 14), 2)
-			pygame.draw.circle(self.image, (106, 66, 26), (rx - 1, 13), 1)
-
+		angle = random.choice([-12, -6, 6, 12])
+		self.image = _cached(('wreck', angle), lambda: _wreck(angle))
+		self.mask = pygame.mask.from_surface(self.image, 127)
 		self.rect = self.image.get_rect(midtop=(x, y))
-		self.name = "Shipwreck"
 		self.hits = 0
+
+	@classmethod
+	def create(cls, x):
+		return [cls(x, -cls.HEIGHT)]
+
+
+def _mine(lit):
+	art = pygame.Surface((46, 46), pygame.SRCALPHA)
+	center = (23, 23)
+	for i in range(8):
+		angle = i * math.tau / 8
+		tip = (23 + math.cos(angle) * 22, 23 + math.sin(angle) * 22)
+		pygame.draw.line(art, (92, 98, 104), center, tip, 4)
+		pygame.draw.circle(art, (196, 200, 196), tip, 2)
+	pygame.draw.circle(art, (46, 52, 60), center, 16)
+	pygame.draw.circle(art, (74, 82, 90), (21, 21), 12)
+	pygame.draw.circle(art, (112, 120, 126), (18, 18), 5)
+	pygame.draw.circle(art, (255, 70, 50) if lit else (120, 30, 30), center, 5)
+	if lit:
+		pygame.draw.circle(art, (255, 200, 170), center, 2)
+	return _finish(art)
+
+
+class SeaMine(pygame.sprite.Sprite):
+	"""Goes off when shot or touched, taking nearby obstacles with it."""
+	WIDTH, HEIGHT = 50, 51
+	kind = 'mine'
+	name = "Sea Mine"
+	toughness = 1
+	damage = 40
+	reward = 3
+	counts_for_rewards = True
+	blast_radius = 130
+	blast_damage = 20  # To a shark caught too close when a mine is shot
+	debris_color = (255, 170, 60)
+	BLINK_STEPS = 24
+
+	def __init__(self, x, y):
+		super().__init__()
+		self.frames = [_cached(('mine', lit), lambda: _mine(lit)) for lit in (False, True)]
+		self.image = self.frames[0]
+		self.mask = pygame.mask.from_surface(self.image, 127)
+		self.rect = self.image.get_rect(midtop=(x, y))
+		self.hits = 0
+		self.age = random.randrange(self.BLINK_STEPS)
+
+	def update(self):
+		self.age += 1
+		self.image = self.frames[(self.age // self.BLINK_STEPS) % 2]
+
+	@classmethod
+	def create(cls, x):
+		return [cls(x, -cls.HEIGHT)]
+
+
+def _jelly(pulse):
+	art = pygame.Surface((30, 40), pygame.SRCALPHA)
+	bell_w = 26 if pulse else 22
+	left = 15 - bell_w // 2
+	for i in range(5):  # Trailing tentacles, on the side away from the bell
+		x = left + 3 + i * (bell_w - 6) // 4
+		points = [(x + math.sin(y * 0.5 + i) * 2, y) for y in range(16, 39, 3)]
+		pygame.draw.lines(art, (232, 178, 232, 200), False, points, 2)
+	pygame.draw.ellipse(art, (196, 112, 214, 235), (left, 2, bell_w, 20))
+	pygame.draw.ellipse(art, (246, 196, 246, 240), (left + 4, 5, bell_w - 8, 9))
+	pygame.draw.ellipse(art, OUTLINE, (left, 2, bell_w, 20), 1)
+	return _finish(art, outline=False)
+
+
+class Jellyfish(pygame.sprite.Sprite):
+	"""Drifts from side to side. One sting is mild, but they come in swarms."""
+	WIDTH, HEIGHT = 150, 130
+	kind = 'jellyfish'
+	name = "Jellyfish"
+	toughness = 1
+	damage = 10
+	reward = 1
+	counts_for_rewards = False  # Swarms are easy kills, so they mustn't earn shields and upgrades
+	blast_radius = 0
+	debris_color = (230, 170, 235)
+	SWAY = 22
+	SWAY_SPEED = 0.03
+	PULSE_STEPS = 20
+
+	def __init__(self, x, y):
+		super().__init__()
+		self.frames = [_cached(('jelly', pulse), lambda: _jelly(pulse)) for pulse in (False, True)]
+		self.image = self.frames[0]
+		self.mask = pygame.mask.from_surface(self.image, 127)
+		self.rect = self.image.get_rect(midtop=(x, y))
+		self.home_x = x
+		self.hits = 0
+		self.age = random.randrange(600)
+
+	def update(self):
+		self.age += 1
+		self.image = self.frames[(self.age // self.PULSE_STEPS) % 2]
+		self.rect.centerx = self.home_x + int(math.sin(self.age * self.SWAY_SPEED) * self.SWAY)
+
+	@classmethod
+	def create(cls, x):
+		"""A swarm. WIDTH and HEIGHT cover all of its members however far they sway."""
+		room = cls.WIDTH // 2 - cls.SWAY - 18
+		return [cls(x + random.randint(-room, room), -random.randint(45, cls.HEIGHT))
+				for _ in range(random.randint(3, 5))]
+
+
+OBSTACLE_TYPES = {cls.kind: cls for cls in (CoralReef, Shipwreck, SeaMine, Jellyfish)}
 
 
 class ReefSegment(pygame.sprite.Sprite):
