@@ -6,13 +6,14 @@ import pygame
 import os
 import math
 from sprite_loader import EnhancedShark, SpriteSheet, SpriteEffects
+from resources import resource_path
 
 class SharkWithSprites(EnhancedShark):
     """Enhanced shark using actual sprite sheet with special effects"""
     
     def __init__(self, x, y):
         # Initialize with sprite sheet
-        super().__init__(x, y, 'assets/hai_0.png')
+        super().__init__(x, y, resource_path('assets', 'hai_0.png'))
         
         # Try to load the sprite sheet with specific dimensions
         self.load_shark_sprites()
@@ -27,7 +28,7 @@ class SharkWithSprites(EnhancedShark):
         
     def load_shark_sprites(self):
         """Load shark sprites from hai_0.png with correct dimensions"""
-        sprite_path = 'assets/hai_0.png'
+        sprite_path = resource_path('assets', 'hai_0.png')
         saved_center = self.rect.center
 
         if os.path.exists(sprite_path):

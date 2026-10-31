@@ -20,12 +20,18 @@ from graphics_enhancements import (
     ScreenEffects, EnhancedParticle
 )
 from settings_manager import SettingsManager
+from resources import resource_path
+
+
+def hits_shark_body(shark, other):
+    """Pixel-accurate hazard check; the shark's rect is mostly transparent"""
+    return shark.rect.colliderect(other.rect) and pygame.sprite.collide_mask(shark, other)
 
 
 def load_sound(filename):
     """Load a sound file from the sounds directory"""
     try:
-        sound_path = os.path.join('sounds', filename)
+        sound_path = resource_path('sounds', filename)
         if os.path.exists(sound_path):
             return pygame.mixer.Sound(sound_path)
         else:
@@ -72,7 +78,7 @@ def main():
     ambient_ocean_sound = load_sound('ambient_ocean.wav')
     
     # Background music
-    background_music_path = os.path.join('sounds', 'shark.wav')
+    background_music_path = resource_path('sounds', 'shark.wav')
     
     print("All sound effects loaded successfully!")
     # Track destroyed obstacles for shield spawn
@@ -598,7 +604,7 @@ def main():
 
         # Collision detection
         # Shark hits obstacle: lose a third of energy per hit
-        hit = pygame.sprite.spritecollide(shark, obstacles, False)
+        hit = pygame.sprite.spritecollide(shark, obstacles, False, hits_shark_body)
         if hit:
             if shield_active and shield_strength > 0:
                 shield_activate_sound.play()  # Play shield sound when it blocks damage
@@ -783,16 +789,19 @@ def main():
             score += 2
 
         # Shark collides with friendly submarine: lose energy
-        sub_hit = pygame.sprite.spritecollide(shark, subs, False)
+        sub_hit = pygame.sprite.spritecollide(shark, subs, False, hits_shark_body)
         if sub_hit:
             energy -= 20
             submarine_collision_sound.play()  # Add submarine collision sound
             print("Ouch! Collided with friendly submarine.")
             for s in sub_hit:
                 s.kill()
-            if energy <= 0:
-                fatal_collision_sound.play()  # Fatal collision sound for submarine too
-                game_over = True
+
+        # Out of energy from a submarine hit or from swimming: checked after
+        # eating so a fish caught on the last drop still saves the shark
+        if energy <= 0 and not game_over:
+            fatal_collision_sound.play()
+            game_over = True
 
         # Draw enhanced background using graphics enhancer
         graphics_enhancer.render_background()

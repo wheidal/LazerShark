@@ -6,6 +6,7 @@ Handles loading sprites from image files and creating animations
 import pygame
 import os
 from typing import List, Tuple, Optional
+from resources import resource_path
 
 class SpriteSheet:
     """Load and extract sprites from a sprite sheet"""
@@ -115,7 +116,7 @@ class AnimatedSprite(pygame.sprite.Sprite):
 class EnhancedShark(AnimatedSprite):
     """Enhanced shark sprite using actual sprite sheet"""
     
-    def __init__(self, x: int, y: int, sprite_sheet_path: str = 'assets/hai_0.png'):
+    def __init__(self, x: int, y: int, sprite_sheet_path: str = resource_path('assets', 'hai_0.png')):
         # Try to load the sprite sheet
         try:
             if os.path.exists(sprite_sheet_path):
@@ -319,9 +320,10 @@ def load_enhanced_sprites():
     sprites = {}
     
     # Load shark sprite
-    if os.path.exists('assets/hai_0.png'):
+    shark_path = resource_path('assets', 'hai_0.png')
+    if os.path.exists(shark_path):
         try:
-            sheet = SpriteSheet('assets/hai_0.png')
+            sheet = SpriteSheet(shark_path)
             # This would need to be adjusted based on actual sprite sheet layout
             sprites['shark'] = sheet
         except:
@@ -329,10 +331,10 @@ def load_enhanced_sprites():
     
     # Load other sprites if available
     sprite_files = {
-        'coral': 'assets/coral.png',
-        'shipwreck': 'assets/shipwreck.png',
-        'fish': 'assets/fish.png',
-        'submarine': 'assets/submarine.png'
+        'coral': resource_path('assets', 'coral.png'),
+        'shipwreck': resource_path('assets', 'shipwreck.png'),
+        'fish': resource_path('assets', 'fish.png'),
+        'submarine': resource_path('assets', 'submarine.png')
     }
     
     for name, path in sprite_files.items():
