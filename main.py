@@ -10,7 +10,7 @@ import os
 import math
 from player import Shark
 from player_enhanced import SharkWithSprites
-from obstacle import CoralReef, Shipwreck, create_reef_wall
+from obstacle import CoralReef, Shipwreck
 from food import SmallFish
 from projectile import Laser, Missile, Torpedo
 from powerup import LaserPowerup, MissilePowerup, TorpedoPowerup, FriendlySubmarine, ShieldPowerup
@@ -21,7 +21,7 @@ from graphics_enhancements import (
 )
 from settings_manager import SettingsManager
 from resources import resource_path
-from reef_passage import ReefPassageDirector, BANK_DAMAGE, BANK_INVULN_MS, BANK_PUSH
+from channel import ChannelDirector, BANK_DAMAGE, BANK_INVULN_MS, BANK_PUSH
 
 # The simulation always advances in 60 Hz steps, so game speed doesn't depend on frame rate
 STEP_MS = 1000 / 60
@@ -39,6 +39,16 @@ class SilentSound:
 def pixels_touch(sprite, other):
     """Pixel-accurate check, for sprites whose rects are mostly transparent"""
     return sprite.rect.colliderect(other.rect) and pygame.sprite.collide_mask(sprite, other)
+
+
+def start_channel(banks, all_sprites):
+    """Create a new channel with its coastline already covering the screen"""
+    channel = ChannelDirector()
+    for chunk, y in channel.prefill():
+        new_banks = chunk.build(y)
+        banks.add(new_banks)
+        all_sprites.add(new_banks)
+    return channel
 
 
 def load_sound(filename):
@@ -290,7 +300,7 @@ def main():
     powerups = pygame.sprite.Group()
     subs = pygame.sprite.Group()
     banks = pygame.sprite.Group()
-    passage = ReefPassageDirector()
+    channel = start_channel(banks, all_sprites)
     bank_invuln = 0
     particles = pygame.sprite.Group()
     emitter = ParticleEmitter(particles)
@@ -308,7 +318,6 @@ def main():
     spawn_timer = 0
     powerup_timer = 0
     sub_timer = 0
-    reef_wall_timer = 0
     score = 0
     restart_lock = 0
     step_backlog = 0
@@ -376,7 +385,7 @@ def main():
                 powerups.empty()
                 subs.empty()
                 banks.empty()
-                passage = ReefPassageDirector()
+                channel = start_channel(banks, all_sprites)
                 bank_invuln = 0
                 particles.empty()
                 enhanced_particles.empty()
@@ -391,7 +400,6 @@ def main():
                 obstacles_destroyed = 0
                 destroyed_counts = {}
                 score = 0
-                reef_wall_timer = 0
                 step_backlog = 0
                 game_over = False
         if game_over:
@@ -553,39 +561,40 @@ def main():
                 energy -= 0.02  # Idle drain
             energy = max(0, min(energy, 100))
 
-            # Reef passage coastline; normal spawning waits until the passage has passed
-            chunk = passage.update(dt, score)
-            score += passage.take_clear_bonus()
+            # Extend the coastline as it scrolls into view
+            chunk = channel.update(score)
             if chunk:
-                new_banks, new_foods = chunk.build()
+                new_banks = chunk.build()
                 banks.add(new_banks)
-                foods.add(new_foods)
-                all_sprites.add(new_banks, new_foods)
+                all_sprites.add(new_banks)
 
-            # Spawn obstacles and food every 1.5 seconds
+            # Spawn obstacles and food every 1.5 seconds, inside the channel
             spawn_timer += dt
-            if spawn_timer > 1500 and not passage.active:
+            if spawn_timer > 1500:
                 spawn_timer = 0
-                spawn_x = random.randint(40, 760)
                 choice = random.choice(['coral', 'shipwreck', 'fish', 'fish'])  # 50% fish, 50% obstacles
                 if choice == 'coral':
-                    coral = CoralReef(spawn_x, -24)
-                    obstacles.add(coral)
-                    all_sprites.add(coral)
+                    spawn_x = channel.spawn_x(80, blocking=True)
+                    if spawn_x is not None:
+                        coral = CoralReef(spawn_x, -24)
+                        obstacles.add(coral)
+                        all_sprites.add(coral)
                 elif choice == 'shipwreck':
-                    wreck = Shipwreck(spawn_x, -28)
-                    obstacles.add(wreck)
-                    all_sprites.add(wreck)
+                    spawn_x = channel.spawn_x(90, blocking=True)
+                    if spawn_x is not None:
+                        wreck = Shipwreck(spawn_x, -28)
+                        obstacles.add(wreck)
+                        all_sprites.add(wreck)
                 else:
-                    fish = SmallFish(spawn_x, -10)
+                    fish = SmallFish(channel.spawn_x(26), -10)
                     foods.add(fish)
                     all_sprites.add(fish)
 
             # Spawn powerups every 4 seconds
             powerup_timer += dt
-            if powerup_timer > 4000 and not passage.active:
+            if powerup_timer > 4000:
                 powerup_timer = 0
-                px = random.randint(40, 760)
+                px = channel.spawn_x(30)
                 ptype = random.choice(['laser', 'missile', 'torpedo'])
                 if ptype == 'laser':
                     p = LaserPowerup(px, -16)
@@ -596,23 +605,15 @@ def main():
                 powerups.add(p)
                 all_sprites.add(p)
 
-            # Spawn friendly submarine every 12 seconds
+            # Spawn friendly submarine every 12 seconds, where there's room to pass it
             sub_timer += dt
-            if sub_timer > 12000 and passage.subs_allowed:
+            if sub_timer > 12000:
                 sub_timer = 0
-                sx = random.randint(60, 740)
-                sub = FriendlySubmarine(sx, -18)
-                subs.add(sub)
-                all_sprites.add(sub)
-
-            # Spawn reef wall every 5 seconds; coverage grows at half the rate of score
-            reef_wall_timer += dt
-            if reef_wall_timer > 5000 and not passage.active:
-                reef_wall_timer = 0
-                reef_coverage = min(0.30 + score * 0.005, 0.70)
-                for seg in create_reef_wall(reef_coverage):
-                    obstacles.add(seg)
-                    all_sprites.add(seg)
+                sx = channel.spawn_x(80, blocking=True)
+                if sx is not None:
+                    sub = FriendlySubmarine(sx, -18)
+                    subs.add(sub)
+                    all_sprites.add(sub)
 
             # Scroll obstacles, food, powerups, and subs downward
             for sprite in obstacles:
@@ -651,8 +652,8 @@ def main():
                         print("Shield depleted! Spawning replacement powerups...")
                         # Spawn 2-3 shield powerups when shield breaks
                         for i in range(random.randint(2, 3)):
-                            px = random.randint(40, 760)
-                            shield_powerup = ShieldPowerup(px, -16 - i * 30)  # Stagger spawn positions
+                            px = channel.spawn_x(26)
+                            shield_powerup = ShieldPowerup(px, -16)
                             powerups.add(shield_powerup)
                             all_sprites.add(shield_powerup)
                 
@@ -753,7 +754,7 @@ def main():
                             obs_type = getattr(obs, 'name', type(obs).__name__)
                             destroyed_counts[obs_type] = destroyed_counts.get(obs_type, 0) + 1
                             if destroyed_counts[obs_type] >= 4 and not shield_active:
-                                px = random.randint(40, 760)
+                                px = channel.spawn_x(26)
                                 shield_powerup = ShieldPowerup(px, -16)
                                 powerups.add(shield_powerup)
                                 all_sprites.add(shield_powerup)
@@ -777,7 +778,7 @@ def main():
                     obs_type = getattr(obs, 'name', type(obs).__name__)
                     destroyed_counts[obs_type] = destroyed_counts.get(obs_type, 0) + 1
                     if destroyed_counts[obs_type] >= 4 and not shield_active:
-                        px = random.randint(40, 760)
+                        px = channel.spawn_x(26)
                         shield_powerup = ShieldPowerup(px, -16)
                         powerups.add(shield_powerup)
                         all_sprites.add(shield_powerup)
@@ -802,7 +803,7 @@ def main():
                     obs_type = getattr(obs, 'name', type(obs).__name__)
                     destroyed_counts[obs_type] = destroyed_counts.get(obs_type, 0) + 1
                     if destroyed_counts[obs_type] >= 4 and not shield_active:
-                        px = random.randint(40, 760)
+                        px = channel.spawn_x(26)
                         shield_powerup = ShieldPowerup(px, -16)
                         powerups.add(shield_powerup)
                         all_sprites.add(shield_powerup)

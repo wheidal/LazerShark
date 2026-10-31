@@ -160,7 +160,7 @@ class FriendlySubmarine(pygame.sprite.Sprite):
 		self.pending_drops = []
 
 	def update(self, *args, **kwargs):
-		self.rect.y += 2
+		self.rect.y += 3  # Same speed as the coastline, so it never drifts into a bank
 		self.drop_timer += 1
 		# Drop supply every 120 frames (~2 seconds at 60fps)
 		if self.drop_timer == 120:
