@@ -13,7 +13,7 @@ dist/
 game_settings.json
 .claude/
 
-# Art and music with unconfirmed licensing stay local; drop replacements in assets/
-sounds/shark.wav
-assets/*
-!assets/.gitkeep
+# Art with unconfirmed licensing stays local
+assets/14928.png
+assets/google shark.png
+assets/google shark 2.png
