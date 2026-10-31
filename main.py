@@ -21,7 +21,7 @@ from graphics_enhancements import (
 )
 from settings_manager import SettingsManager
 from resources import resource_path
-from reef_passage import ReefPassageDirector, ROCK_DAMAGE, ROCK_INVULN_MS, ROCK_PUSH
+from reef_passage import ReefPassageDirector, BANK_DAMAGE, BANK_INVULN_MS, BANK_PUSH
 
 # The simulation always advances in 60 Hz steps, so game speed doesn't depend on frame rate
 STEP_MS = 1000 / 60
@@ -36,9 +36,9 @@ class SilentSound:
         pass
 
 
-def hits_shark_body(shark, other):
-    """Pixel-accurate hazard check; the shark's rect is mostly transparent"""
-    return shark.rect.colliderect(other.rect) and pygame.sprite.collide_mask(shark, other)
+def pixels_touch(sprite, other):
+    """Pixel-accurate check, for sprites whose rects are mostly transparent"""
+    return sprite.rect.colliderect(other.rect) and pygame.sprite.collide_mask(sprite, other)
 
 
 def load_sound(filename):
@@ -289,9 +289,9 @@ def main():
     projectiles = pygame.sprite.Group()
     powerups = pygame.sprite.Group()
     subs = pygame.sprite.Group()
-    rocks = pygame.sprite.Group()
+    banks = pygame.sprite.Group()
     passage = ReefPassageDirector()
-    rock_invuln = 0
+    bank_invuln = 0
     particles = pygame.sprite.Group()
     emitter = ParticleEmitter(particles)
     
@@ -375,9 +375,9 @@ def main():
                 projectiles.empty()
                 powerups.empty()
                 subs.empty()
-                rocks.empty()
+                banks.empty()
                 passage = ReefPassageDirector()
-                rock_invuln = 0
+                bank_invuln = 0
                 particles.empty()
                 enhanced_particles.empty()
                 energy = 100
@@ -553,15 +553,14 @@ def main():
                 energy -= 0.02  # Idle drain
             energy = max(0, min(energy, 100))
 
-            # Reef passage rows; normal spawning waits until the passage has passed
-            reef_row = passage.update(dt, score)
-            if reef_row:
-                new_rocks, new_plugs, new_foods, new_rewards = reef_row.build()
-                rocks.add(new_rocks)
-                obstacles.add(new_plugs)
+            # Reef passage coastline; normal spawning waits until the passage has passed
+            chunk = passage.update(dt, score)
+            score += passage.take_clear_bonus()
+            if chunk:
+                new_banks, new_foods = chunk.build()
+                banks.add(new_banks)
                 foods.add(new_foods)
-                powerups.add(new_rewards)
-                all_sprites.add(new_rocks, new_plugs, new_foods, new_rewards)
+                all_sprites.add(new_banks, new_foods)
 
             # Spawn obstacles and food every 1.5 seconds
             spawn_timer += dt
@@ -620,10 +619,9 @@ def main():
                 sprite.rect.y += 3
                 if sprite.rect.top > 600:
                     sprite.kill()
-            for sprite in rocks:
+            for sprite in banks:
                 sprite.rect.y += 3
                 if sprite.rect.top > 600:
-                    score += sprite.clear_bonus
                     sprite.kill()
             for sprite in foods:
                 sprite.rect.y += 3
@@ -639,7 +637,7 @@ def main():
 
             # Collision detection
             # Shark hits obstacle: lose a third of energy per hit
-            hit = pygame.sprite.spritecollide(shark, obstacles, False, hits_shark_body)
+            hit = pygame.sprite.spritecollide(shark, obstacles, False, pixels_touch)
             if hit:
                 if shield_active and shield_strength > 0:
                     shield_activate_sound.play()  # Play shield sound when it blocks damage
@@ -715,31 +713,31 @@ def main():
                                     sys.exit()
                         pygame.event.clear()  # Discard buffered events from the animation wait
 
-            # Rock can't be destroyed: it costs energy once, then pushes the shark
-            # toward the gap, and the shark stays safe until it has been clear for a moment
-            touching = pygame.sprite.spritecollide(shark, rocks, False, hits_shark_body)
+            # Coastline can't be destroyed: it costs energy once, then pushes the shark toward
+            # the channel, and the shark stays safe until it has been clear for a moment
+            touching = pygame.sprite.spritecollide(shark, banks, False, pixels_touch)
             if touching:
-                if rock_invuln <= 0:
+                if bank_invuln <= 0:
                     if shield_active and shield_strength > 0:
                         shield_activate_sound.play()
-                        shield_strength -= ROCK_DAMAGE
+                        shield_strength -= BANK_DAMAGE
                         if shield_strength <= 0:
                             shield_active = False
                             shield_strength = 0
                     else:
-                        energy -= ROCK_DAMAGE
+                        energy -= BANK_DAMAGE
                         coral_collision_sound.play()
                         graphics_enhancer.trigger_damage_effect()
                     emitter.emit(shark.rect.center, color=(180,180,200), count=14, size=8, speed=5, lifetime=20)
-                rock_invuln = ROCK_INVULN_MS
-                to_gap = touching[0].gap_center - shark.rect.centerx
-                shark.rect.centerx += max(-ROCK_PUSH, min(ROCK_PUSH, to_gap))
+                bank_invuln = BANK_INVULN_MS
+                to_channel = touching[0].channel_center - shark.rect.centerx
+                shark.rect.centerx += max(-BANK_PUSH, min(BANK_PUSH, to_channel))
                 shark.rect.x = max(0, min(shark.rect.x, 800 - shark.rect.width))
-            elif rock_invuln > 0:
-                rock_invuln -= dt
+            elif bank_invuln > 0:
+                bank_invuln -= dt
 
-            # Shots stop dead against rock
-            for shot, struck in pygame.sprite.groupcollide(projectiles, rocks, True, False).items():
+            # Shots stop dead against the coastline
+            for shot in pygame.sprite.groupcollide(projectiles, banks, True, False, pixels_touch):
                 emitter.emit(shot.rect.midtop, color=(200,200,210), count=6, size=4, speed=3, lifetime=12)
 
             # Laser hits coral reefs and shipwrecks: increment hit counter, break after 3 hits
@@ -852,7 +850,7 @@ def main():
                 score += 2
 
             # Shark collides with friendly submarine: lose energy
-            sub_hit = pygame.sprite.spritecollide(shark, subs, False, hits_shark_body)
+            sub_hit = pygame.sprite.spritecollide(shark, subs, False, pixels_touch)
             if sub_hit:
                 energy -= 20
                 submarine_collision_sound.play()  # Add submarine collision sound
@@ -883,8 +881,8 @@ def main():
         all_sprites.draw(screen)
         particles.draw(screen)
         enhanced_particles.draw(screen)
-        # Blink a ring around the shark while it can't be hurt by rock
-        if rock_invuln > 0 and int(rock_invuln / 100) % 2:
+        # Blink a ring around the shark while it can't be hurt by the coastline
+        if bank_invuln > 0 and int(bank_invuln / 100) % 2:
             pygame.draw.circle(screen, (255, 255, 255), shark.rect.center, 62, 2)
         # Draw energy bar
         pygame.draw.rect(screen, (0, 200, 0), (20, 20, int(energy * 3), 20))

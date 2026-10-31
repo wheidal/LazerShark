@@ -36,9 +36,9 @@ def test_hazard_needs_to_touch_shark_body(display):
     coral = CoralReef(0, 0)
     coral.rect.midright = (shark.rect.left + 15, shark.rect.centery)
     assert shark.rect.colliderect(coral.rect)
-    assert not game.hits_shark_body(shark, coral)
+    assert not game.pixels_touch(shark, coral)
     coral.rect.center = shark.rect.center
-    assert game.hits_shark_body(shark, coral)
+    assert game.pixels_touch(shark, coral)
 
 
 def test_default_keys_use_pygame_2_codes(monkeypatch, tmp_path):

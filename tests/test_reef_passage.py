@@ -4,46 +4,30 @@ import sys
 import pygame
 import pytest
 
-from obstacle import ReefSegment
 from projectile import Laser, Missile, Torpedo
 import reef_passage as rp
 
 needs_live_locals = pytest.mark.skipif(sys.version_info < (3, 13), reason='writes to frame locals')
-SHARK_NOSE_Y = 493  # Lowest (hardest) position: the shark stays at the bottom of its range
+SHARK_TOP_Y = 493  # Lowest position: the shark stays at the bottom of its range
 
 
-def generate_rows(seed, score):
-    director = rp.ReefPassageDirector(random.Random(seed))
-    director.start(score)
-    rows = []
-    for _ in range(rp.ROWS_PER_PASSAGE * rp.ROW_SPACING):
-        row = director.update(0, score)
-        if row:
-            rows.append(row)
-    return rows
-
-
-def route_exists(rows, start_x):
-    """Search every position the shark's body could reach, treating plugs as solid."""
+def route_exists(samples, start_x, shark_w=rp.SHARK_BODY_W):
+    """Search every position the shark's body could reach through the channel."""
     reachable = {start_x}
-    half = rp.SHARK_BODY_W / 2
-    top = SHARK_NOSE_Y
-    bottom = top + rp.SHARK_BODY_H
-    # Row i appears at the top of the screen after (i + 1) spacings of scrolling
-    scroll = -rp.ROCK_H
-    last = (len(rows) - 1) * rp.ROW_SPACING + 600 + rp.ROCK_H
-    while scroll < last:
+    half = shark_w / 2
+    body_samples = rp.SHARK_BODY_H // rp.SAMPLE_SPACING + 1
+    total = len(samples) * rp.SAMPLE_SPACING + 800
+    scroll = 0
+    while scroll < total:
         scroll += rp.SCROLL_PER_STEP
-        solid = []
-        for i, row in enumerate(rows):
-            y = scroll - i * rp.ROW_SPACING
-            if y < bottom and y + rp.ROCK_H > top:
-                solid.extend(row.rock_spans())
-                if row.plug_x is not None:
-                    solid.append((row.plug_x, rp.PLUG_WIDTH))
-        widened = {max(0, min(800, x + dx)) for x in reachable for dx in range(-rp.SHARK_SPEED, rp.SHARK_SPEED + 1, rp.SHARK_SPEED)}
-        reachable = {x for x in widened
-                     if not any(x + half > sx and x - half < sx + sw for sx, sw in solid)}
+        # Sample i has scrolled down to screen y = scroll - i * spacing
+        nearest = (scroll - (SHARK_TOP_Y + rp.SHARK_BODY_H)) // rp.SAMPLE_SPACING
+        level = [samples[i] for i in range(nearest, nearest + body_samples) if 0 <= i < len(samples)]
+        low = max((left for left, _ in level), default=-10 ** 6)
+        high = min((right for _, right in level), default=10 ** 6)
+        reachable = {x for x in {max(0, min(800, c + d)) for c in reachable
+                                 for d in (-rp.SHARK_SPEED, 0, rp.SHARK_SPEED)}
+                     if x - half > low and x + half < high}
         if not reachable:
             return False
     return True
@@ -51,119 +35,157 @@ def route_exists(rows, start_x):
 
 @pytest.mark.parametrize('score', [0, 60, 200])
 @pytest.mark.parametrize('start_x', [25, 400, 775])
-def test_every_generated_passage_has_a_route(score, start_x):
-    for seed in range(60):
-        assert route_exists(generate_rows(seed, score), start_x), seed
+def test_every_generated_channel_has_a_route(score, start_x):
+    for seed in range(40):
+        assert route_exists(rp.generate_channel(random.Random(seed), score), start_x), seed
 
 
-def test_gaps_stay_fair_and_narrow_with_score():
-    for score, width in [(0, rp.WIDEST_GAP), (500, rp.NARROWEST_GAP)]:
-        for row in generate_rows(1, score):
-            assert row.gap_w == width
-            assert 0 <= row.gap_x and row.gap_x + row.gap_w <= 800
+def test_route_check_catches_an_impossible_channel():
+    closed = [(0, 800)] * 50 + [(500, 300)] * 50 + [(0, 800)] * 50
+    assert not route_exists(closed, 400)
 
 
-def test_plug_never_overlaps_gap():
-    for seed in range(200):
-        for row in generate_rows(seed, 0):
-            if row.plug_x is not None:
-                assert row.plug_x + rp.PLUG_WIDTH < row.gap_x or row.plug_x > row.gap_x + row.gap_w
+def test_channel_stays_wide_enough_and_narrows_with_score():
+    for score, narrowest in [(0, rp.WIDEST_CHANNEL), (500, rp.NARROWEST_CHANNEL)]:
+        for seed in range(30):
+            samples = rp.generate_channel(random.Random(seed), score)
+            assert min(r - l for l, r in samples) >= narrowest - 2 * rp.COAST_ROUGHNESS - 2
 
 
-def test_normal_spawning_waits_for_passage():
+def test_banks_start_and_end_off_screen():
+    for seed in range(30):
+        samples = rp.generate_channel(random.Random(seed), 0)
+        for left, right in (samples[0], samples[-1]):
+            assert left <= 0 and right >= 800
+
+
+def test_channel_really_winds():
+    samples = rp.generate_channel(random.Random(3), 0)
+    start = rp.FUNNEL_LENGTH // rp.SAMPLE_SPACING
+    centers = [(l + r) / 2 for l, r in samples[start:-start]]
+    assert max(centers) - min(centers) > 150
+
+
+def all_chunks(seed, score=0):
+    director = rp.ReefPassageDirector(random.Random(seed))
+    director.start(score)
+    chunks = []
+    while director.active:
+        chunk = director.update(0, score)
+        if chunk:
+            chunks.append(chunk)
+    return director, chunks
+
+
+def test_chunks_join_without_gaps_and_end_cleanly():
+    director, chunks = all_chunks(5)
+    for earlier, later in zip(chunks, chunks[1:]):
+        assert earlier.samples[-1] == later.samples[0]
+    assert director.wait_ms == rp.PASSAGE_INTERVAL_MS
+
+
+def test_clear_bonus_waits_for_the_shark_and_pays_once():
+    director, _ = all_chunks(5)
+    assert director.take_clear_bonus() == 0
+    for _ in range(rp.BONUS_AFTER_END // rp.SCROLL_PER_STEP + 1):
+        director.update(0, 0)
+    assert director.take_clear_bonus() == rp.CLEAR_BONUS
+    assert director.take_clear_bonus() == 0
+
+
+def test_fish_appear_inside_the_channel(display):
+    _, chunks = all_chunks(2)
+    fish = [c for c in chunks if c.has_fish]
+    assert len(fish) >= 3
+    for chunk in fish:
+        left, right = chunk.samples[len(chunk.samples) // 2]
+        assert left < chunk.channel_center < right
+
+
+def test_bank_collision_shape_matches_the_coastline(display):
+    samples = [(200, 600)] * 7
+    left, right = rp.ChannelChunk(samples).build()[0]
+    assert left.rect.right == 200 and right.rect.left == 600
+    assert left.mask.get_at((190, 24)) and right.mask.get_at((10, 24))
+
+
+def test_submarines_stop_before_a_passage():
     director = rp.ReefPassageDirector(random.Random(1))
     assert director.subs_allowed
     director.wait_ms = rp.SUB_CLEAR_MS - 1
     assert not director.subs_allowed and not director.active
-    director.start()
-    assert director.active
-    for _ in range(rp.ROWS_PER_PASSAGE * rp.ROW_SPACING):
-        director.update(0, 0)
-    assert not director.active
-    assert director.wait_ms == rp.PASSAGE_INTERVAL_MS
 
 
-def rock_row(state, gap_x=350):
-    row = rp.ReefRow(gap_x, 160)
-    rocks, plugs, foods, rewards = row.build()
-    state['rocks'].add(rocks)
-    state['all_sprites'].add(rocks)
-    return rocks
+def add_banks(state, y, samples):
+    banks, _ = rp.ChannelChunk(samples).build()
+    for bank in banks:
+        bank.rect.y = y
+    state['banks'].add(banks)
+    state['all_sprites'].add(banks)
+    return banks
 
 
 @needs_live_locals
-def test_hitting_rock_costs_energy_once_and_never_traps_shark(play):
+def test_hitting_a_bank_costs_energy_once_and_never_traps_shark(play):
     seen = {}
 
     def script(state, frame):
         if frame == 1:
-            state['shark'].rect.centerx = 60
             state['passage'].wait_ms = 10 ** 9
-            seen['rocks'] = rock_row(state)
-            for rock in seen['rocks']:
-                rock.rect.y = state['shark'].rect.top - rp.ROCK_H - 3
-        if frame == 200:
+            state['shark'].rect.centerx = 60
+            top = state['shark'].rect.top
+            for y in range(top - 96, top + 100, rp.CHUNK_H):
+                add_banks(state, y, [(250, 500)] * 7)
+        if frame == 100:
             seen['energy'] = state['energy']
-            seen['clear'] = not pygame.sprite.spritecollideany(state['shark'], state['rocks'], pygame.sprite.collide_mask)
+            seen['center'] = state['shark'].rect.centerx
             seen['over'] = state['game_over']
+            seen['touching'] = bool(pygame.sprite.spritecollideany(
+                state['shark'], state['banks'], pygame.sprite.collide_mask))
             return True
 
     play(script)
-    assert not seen['over']
-    assert seen['clear']
-    assert 100 - rp.ROCK_DAMAGE - 5 < seen['energy'] < 100 - rp.ROCK_DAMAGE + 1
+    assert not seen['over'] and not seen['touching']
+    assert seen['center'] > 250
+    assert 100 - rp.BANK_DAMAGE - 5 < seen['energy'] < 100 - rp.BANK_DAMAGE + 1
 
 
 @needs_live_locals
 @pytest.mark.parametrize('weapon', [Laser, Missile, Torpedo])
-def test_rock_survives_and_stops_every_weapon(play, weapon):
+def test_coastline_survives_and_stops_every_weapon(play, weapon):
     seen = {}
 
     def script(state, frame):
         if frame == 1:
             state['passage'].wait_ms = 10 ** 9
-            seen['rocks'] = rock_row(state)
-            for rock in seen['rocks']:
-                rock.rect.y = 200
-            seen['shot'] = weapon(100, 270)
+            seen['banks'] = add_banks(state, 200, [(250, 500)] * 7)
+            seen['shot'] = weapon(100, 300)
             state['projectiles'].add(seen['shot'])
             state['all_sprites'].add(seen['shot'])
-        return frame >= 15
+        return frame >= 20
 
     play(script)
-    assert all(rock.alive() for rock in seen['rocks'])
+    assert all(bank.alive() for bank in seen['banks'])
     assert not seen['shot'].alive()
 
 
 @needs_live_locals
-def test_torpedoes_do_not_lock_onto_rock(play):
-    seen = {}
-
-    def script(state, frame):
-        if frame == 1:
-            rock_row(state)
-            seen['targets'] = len(state['obstacles'])
-        return frame >= 2
-
-    play(script)
-    assert seen['targets'] == 0
-
-
-@needs_live_locals
-def test_coral_plug_can_be_shot_out(play):
+def test_shots_pass_through_open_channel(play):
     seen = {}
 
     def script(state, frame):
         if frame == 1:
             state['passage'].wait_ms = 10 ** 9
-            seen['plug'] = ReefSegment(100, rp.PLUG_WIDTH)
-            seen['plug'].rect.y = 200
-            state['obstacles'].add(seen['plug'])
-            state['projectiles'].add(Missile(150, 270))
-        return frame >= 15
+            add_banks(state, 200, [(250, 500)] * 7)
+            seen['shot'] = Laser(400, 300)
+            state['projectiles'].add(seen['shot'])
+            state['all_sprites'].add(seen['shot'])
+        if frame == 10:
+            seen['alive'] = seen['shot'].alive()
+            return True
 
     play(script)
-    assert not seen['plug'].alive()
+    assert seen['alive']
 
 
 @needs_live_locals
@@ -176,23 +198,23 @@ def test_steering_bot_clears_a_real_passage_unharmed(play, monkeypatch, seed):
             return held.get(key, False)
 
     monkeypatch.setattr(pygame.key, 'get_pressed', lambda: Keys())
-    seen = {'bonus': False, 'worst': 100}
+    seen = {'hit': False, 'bonus': False}
 
     def script(state, frame):
         if frame == 1:
             state['passage'] = rp.ReefPassageDirector(random.Random(seed))
             state['passage'].start()
         shark = state['shark']
-        ahead = sorted((r for r in state['rocks'] if r.rect.top < shark.rect.bottom), key=lambda r: -r.rect.top)
-        target = ahead[0].gap_center if ahead else shark.rect.centerx
+        level = [b for b in state['banks'] if b.rect.top <= shark.rect.centery <= b.rect.bottom]
+        target = level[0].channel_center if level else 400
         held[pygame.K_LEFT] = target < shark.rect.centerx - 5
         held[pygame.K_RIGHT] = target > shark.rect.centerx + 5
-        seen['hit'] = seen.get('hit', False) or state['rock_invuln'] > 0
+        seen['hit'] = seen['hit'] or state['bank_invuln'] > 0
         seen['bonus'] = seen['bonus'] or state['score'] >= rp.CLEAR_BONUS
         seen['over'] = state['game_over']
-        seen['passes'] = not state['passage'].active and not state['rocks']
-        return frame > 5 and seen['passes']
+        seen['done'] = frame > 5 and not state['passage'].active and not state['banks']
+        return seen['done'] and seen['bonus']
 
-    play(script, max_frames=1500)
-    assert seen['passes'] and seen['bonus'] and not seen['over']
+    play(script, max_frames=2500)
+    assert seen['done'] and seen['bonus'] and not seen['over']
     assert not seen['hit']
