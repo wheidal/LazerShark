@@ -13,6 +13,7 @@ dist/
 game_settings.json
 .claude/
 
-# Art with unconfirmed licensing stays local; drop replacements in assets/
+# Art and music with unconfirmed licensing stay local; drop replacements in assets/
+sounds/shark.wav
 assets/*
 !assets/.gitkeep
