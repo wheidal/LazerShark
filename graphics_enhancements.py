@@ -356,7 +356,12 @@ class ScreenEffects:
     @staticmethod
     def create_vignette(surface: pygame.Surface, intensity: float = 0.3):
         """Add vignette effect to edges of screen"""
-        width, height = surface.get_size()
+        surface.blit(ScreenEffects.build_vignette(surface.get_size(), intensity), (0, 0))
+
+    @staticmethod
+    def build_vignette(size: Tuple[int, int], intensity: float = 0.3) -> pygame.Surface:
+        """Build a reusable vignette overlay"""
+        width, height = size
         vignette = pygame.Surface((width, height), pygame.SRCALPHA)
         
         # Create radial gradient from center
@@ -369,7 +374,7 @@ class ScreenEffects:
                 alpha = int((dist / max_dist) * 255 * intensity)
                 pygame.draw.rect(vignette, (0, 0, 0, alpha), (x, y, 8, 8))
         
-        surface.blit(vignette, (0, 0))
+        return vignette
     
     @staticmethod
     def add_scan_lines(surface: pygame.Surface, time: float):
@@ -481,6 +486,24 @@ class GraphicsEnhancer:
         self.time = 0
         self.damage_flash = 0
         
+        # These never change, so build them once rather than every frame
+        self.background = self._build_background()
+        self.tint = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        self.tint.fill((0, 20, 40, 30))
+        self.vignette = ScreenEffects.build_vignette((self.width, self.height), 0.2)
+        
+    def _build_background(self) -> pygame.Surface:
+        """Create the gradient ocean background with depth fog"""
+        background = pygame.Surface((self.width, self.height)).convert()
+        for y in range(0, self.height, 2):
+            depth_factor = y / self.height
+            blue_value = int(20 + depth_factor * 60)
+            green_value = int(10 + depth_factor * 30)
+            color = (0, green_value, blue_value)
+            pygame.draw.rect(background, color, (0, y, self.width, 2))
+        self.lighting.create_depth_fog(background, 0.3)
+        return background
+        
     def update(self, delta_time: float):
         """Update all enhancement systems"""
         self.time += delta_time
@@ -491,30 +514,21 @@ class GraphicsEnhancer:
     
     def render_background(self):
         """Render enhanced background"""
-        # Create gradient ocean background
-        for y in range(0, self.height, 2):
-            depth_factor = y / self.height
-            blue_value = int(20 + depth_factor * 60)
-            green_value = int(10 + depth_factor * 30)
-            color = (0, green_value, blue_value)
-            pygame.draw.rect(self.screen, color, (0, y, self.width, 2))
+        self.screen.blit(self.background, (0, 0))
         
         # Add background layers
         self.backgrounds.draw(self.screen)
         
         # Add volumetric lighting
         # self.lighting.create_volumetric_rays(self.screen, self.time)
-        
-        # Add depth fog
-        self.lighting.create_depth_fog(self.screen, 0.3)
     
     def render_effects(self):
         """Apply post-processing effects"""
         # Water tint
-        ScreenEffects.apply_underwater_tint(self.screen)
+        self.screen.blit(self.tint, (0, 0))
         
         # Vignette
-        ScreenEffects.create_vignette(self.screen, 0.2)
+        self.screen.blit(self.vignette, (0, 0))
         
         # Underwater caustic light shimmer
         # ScreenEffects.add_caustic_shimmer(self.screen, self.time)

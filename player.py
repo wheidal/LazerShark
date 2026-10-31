@@ -153,8 +153,8 @@ class Shark(pygame.sprite.Sprite):
 		if move_dict['down']:
 			self.rect.y += self.speed
 		# Keep shark at bottom portion of screen
-		self.rect.y = max(400, min(self.rect.y, 580))
-		self.rect.x = max(0, min(self.rect.x, 768))
+		self.rect.y = max(400, min(self.rect.y, 600 - self.rect.height))
+		self.rect.x = max(0, min(self.rect.x, 800 - self.rect.width))
 		# Animation
 		self.frame_timer += dt
 		if self.frame_timer > 1000 // self.frame_rate:
