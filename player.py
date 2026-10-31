@@ -4,6 +4,7 @@ Temporary shark sprite for prototyping (16x32 px, top-down, simple blue shape).
 """
 import pygame
 import os
+import math
 
 class Shark(pygame.sprite.Sprite):
 	def __init__(self, x, y):
@@ -22,7 +23,6 @@ class Shark(pygame.sprite.Sprite):
 		self.fire_cooldown = 0
 
 	def _create_frame(self, phase):
-		import math
 		surf = pygame.Surface((48, 72), pygame.SRCALPHA)
 		
 		# Enhanced shark with gradient shading and better details

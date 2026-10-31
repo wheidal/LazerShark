@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Build output and archives
+build/
+dist/
+*.zip
+
+# Local player settings and tooling
+game_settings.json
+.claude/
+
+# Art with unconfirmed licensing stays local; drop replacements in assets/
+assets/*
+!assets/.gitkeep

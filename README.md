@@ -72,7 +72,8 @@ Take control of a powerful shark armed with lasers, missiles, and torpedoes as y
 | Fire Missile | Left Alt | B Button |
 | Fire Torpedo | Left Ctrl | X Button |
 | Pause | P | Start Button |
-| Quit | Escape | - |
+| Restart Game (Game Over) | Any Key | Any Button (except Start) |
+| Quit | Escape | Start Button (Game Over) |
 
 ### 🎮 Gameplay Mechanics
 
