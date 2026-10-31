@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Build output and archives
+build/
+dist/
+*.zip
+
+# Local player settings and tooling
+game_settings.json
+.claude/
+
+# Art with unconfirmed licensing stays local
+assets/14928.png
+assets/google shark.png
+assets/google shark 2.png
