@@ -21,6 +21,7 @@ from graphics_enhancements import (
 )
 from settings_manager import SettingsManager
 from resources import resource_path
+from reef_passage import ReefPassageDirector, ROCK_DAMAGE, ROCK_INVULN_MS, ROCK_PUSH
 
 # The simulation always advances in 60 Hz steps, so game speed doesn't depend on frame rate
 STEP_MS = 1000 / 60
@@ -288,6 +289,9 @@ def main():
     projectiles = pygame.sprite.Group()
     powerups = pygame.sprite.Group()
     subs = pygame.sprite.Group()
+    rocks = pygame.sprite.Group()
+    passage = ReefPassageDirector()
+    rock_invuln = 0
     particles = pygame.sprite.Group()
     emitter = ParticleEmitter(particles)
     
@@ -371,6 +375,9 @@ def main():
                 projectiles.empty()
                 powerups.empty()
                 subs.empty()
+                rocks.empty()
+                passage = ReefPassageDirector()
+                rock_invuln = 0
                 particles.empty()
                 enhanced_particles.empty()
                 energy = 100
@@ -546,9 +553,19 @@ def main():
                 energy -= 0.02  # Idle drain
             energy = max(0, min(energy, 100))
 
+            # Reef passage rows; normal spawning waits until the passage has passed
+            reef_row = passage.update(dt, score)
+            if reef_row:
+                new_rocks, new_plugs, new_foods, new_rewards = reef_row.build()
+                rocks.add(new_rocks)
+                obstacles.add(new_plugs)
+                foods.add(new_foods)
+                powerups.add(new_rewards)
+                all_sprites.add(new_rocks, new_plugs, new_foods, new_rewards)
+
             # Spawn obstacles and food every 1.5 seconds
             spawn_timer += dt
-            if spawn_timer > 1500:
+            if spawn_timer > 1500 and not passage.active:
                 spawn_timer = 0
                 spawn_x = random.randint(40, 760)
                 choice = random.choice(['coral', 'shipwreck', 'fish', 'fish'])  # 50% fish, 50% obstacles
@@ -567,7 +584,7 @@ def main():
 
             # Spawn powerups every 4 seconds
             powerup_timer += dt
-            if powerup_timer > 4000:
+            if powerup_timer > 4000 and not passage.active:
                 powerup_timer = 0
                 px = random.randint(40, 760)
                 ptype = random.choice(['laser', 'missile', 'torpedo'])
@@ -582,7 +599,7 @@ def main():
 
             # Spawn friendly submarine every 12 seconds
             sub_timer += dt
-            if sub_timer > 12000:
+            if sub_timer > 12000 and passage.subs_allowed:
                 sub_timer = 0
                 sx = random.randint(60, 740)
                 sub = FriendlySubmarine(sx, -18)
@@ -591,7 +608,7 @@ def main():
 
             # Spawn reef wall every 5 seconds; coverage grows at half the rate of score
             reef_wall_timer += dt
-            if reef_wall_timer > 5000:
+            if reef_wall_timer > 5000 and not passage.active:
                 reef_wall_timer = 0
                 reef_coverage = min(0.30 + score * 0.005, 0.70)
                 for seg in create_reef_wall(reef_coverage):
@@ -602,6 +619,11 @@ def main():
             for sprite in obstacles:
                 sprite.rect.y += 3
                 if sprite.rect.top > 600:
+                    sprite.kill()
+            for sprite in rocks:
+                sprite.rect.y += 3
+                if sprite.rect.top > 600:
+                    score += sprite.clear_bonus
                     sprite.kill()
             for sprite in foods:
                 sprite.rect.y += 3
@@ -692,6 +714,33 @@ def main():
                                     pygame.quit()
                                     sys.exit()
                         pygame.event.clear()  # Discard buffered events from the animation wait
+
+            # Rock can't be destroyed: it costs energy once, then pushes the shark
+            # toward the gap, and the shark stays safe until it has been clear for a moment
+            touching = pygame.sprite.spritecollide(shark, rocks, False, hits_shark_body)
+            if touching:
+                if rock_invuln <= 0:
+                    if shield_active and shield_strength > 0:
+                        shield_activate_sound.play()
+                        shield_strength -= ROCK_DAMAGE
+                        if shield_strength <= 0:
+                            shield_active = False
+                            shield_strength = 0
+                    else:
+                        energy -= ROCK_DAMAGE
+                        coral_collision_sound.play()
+                        graphics_enhancer.trigger_damage_effect()
+                    emitter.emit(shark.rect.center, color=(180,180,200), count=14, size=8, speed=5, lifetime=20)
+                rock_invuln = ROCK_INVULN_MS
+                to_gap = touching[0].gap_center - shark.rect.centerx
+                shark.rect.centerx += max(-ROCK_PUSH, min(ROCK_PUSH, to_gap))
+                shark.rect.x = max(0, min(shark.rect.x, 800 - shark.rect.width))
+            elif rock_invuln > 0:
+                rock_invuln -= dt
+
+            # Shots stop dead against rock
+            for shot, struck in pygame.sprite.groupcollide(projectiles, rocks, True, False).items():
+                emitter.emit(shot.rect.midtop, color=(200,200,210), count=6, size=4, speed=3, lifetime=12)
 
             # Laser hits coral reefs and shipwrecks: increment hit counter, break after 3 hits
             for laser in [s for s in projectiles if isinstance(s, Laser)]:
@@ -834,6 +883,9 @@ def main():
         all_sprites.draw(screen)
         particles.draw(screen)
         enhanced_particles.draw(screen)
+        # Blink a ring around the shark while it can't be hurt by rock
+        if rock_invuln > 0 and int(rock_invuln / 100) % 2:
+            pygame.draw.circle(screen, (255, 255, 255), shark.rect.center, 62, 2)
         # Draw energy bar
         pygame.draw.rect(screen, (0, 200, 0), (20, 20, int(energy * 3), 20))
         pygame.draw.rect(screen, (255, 255, 255), (20, 20, 300, 20), 2)
