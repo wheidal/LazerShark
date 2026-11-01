@@ -6,9 +6,11 @@ import random
 import pygame
 
 from channel import ChannelDirector, SCROLL_PER_STEP
-from food import SmallFish
+from enemies import RadioactivePiranha
+from food import SmallFish, ZombieFish
 from graphics_enhancements import ParticleEffects
-from obstacle import OBSTACLE_TYPES
+from hazards import _whirlpool_art
+from obstacle import EmpJellyfish, OBSTACLE_TYPES, RadiationBarrel
 from player import Shark
 from player_enhanced import SharkWithSprites
 from shark_look import SharkLook
@@ -181,6 +183,19 @@ def _weapon_rows():
     ]
 
 
+def _hazard_rows():
+    whirlpool = pygame.transform.smoothscale(_whirlpool_art()[0], (40, 40))
+    whirlpool.fill((80, 90, 100), special_flags=pygame.BLEND_RGB_ADD)  # Stands out on the dark panel
+    shark_rect = pygame.Rect(0, 0, 1, 1)
+    return [
+        (RadiationBarrel(0, 0).image, "Radiation barrel", "Shoot it before it leaks. Clouds go right through your shield"),
+        (RadioactivePiranha(0, 0, shark_rect).image, "Radioactive piranha", "They chase you, and leave radiation behind when killed"),
+        (ZombieFish(0, 0).image, "Zombie fish", "Grey with red crosses for eyes. Don't eat it: it bites!"),
+        (EmpJellyfish(0, 0).image, "EMP jellyfish", "Its sting knocks out your laser for 2 seconds"),
+        (whirlpool, "Whirlpool", "Drags you in, and its core hurts. Swim hard to escape"),
+    ]
+
+
 class Briefing:
     def __init__(self, screen, keymap):
         self.screen = screen
@@ -194,6 +209,7 @@ class Briefing:
             (_outlined(title_font, "WEAPONS", PROMPT_COLOR, (0, 0, 0), 2), _weapon_rows(),
              ["Grab the same letter to power up, to level 3. A new letter swaps weapon.",
               "Taking a hit costs a level. Destroying 5 obstacles earns one."]),
+            (_outlined(title_font, "HAZARDS", PROMPT_COLOR, (0, 0, 0), 2), _hazard_rows(), []),
         ]
         self.page = 0
         self.elapsed = 0
@@ -233,7 +249,7 @@ class Briefing:
             image = self.text_font.render(line, True, PROMPT_COLOR)
             screen.blit(image, image.get_rect(center=(400, y + 10)))
             y += 28
-        words = "Press any key to dive in" if self.page == len(self.pages) - 1 else "Press any key for weapons"
+        words = "Press any key to dive in" if self.page == len(self.pages) - 1 else "Press any key for more"
         prompt = self.text_font.render(words, True, (255, 255, 255))
         screen.blit(prompt, prompt.get_rect(center=(400, 518)))
         share = max(0, 1 - self.elapsed / BRIEFING_MS)  # Time left on this page

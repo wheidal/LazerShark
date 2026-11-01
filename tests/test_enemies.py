@@ -209,9 +209,9 @@ def test_session_with_every_enemy_runs_clean(play, monkeypatch):
             state['score'] = 90
         enemies = [s for s in state['obstacles'] if isinstance(s, Enemy)]
         seen['kinds'].update(s.kind for s in enemies)
-        return frame >= 4000
+        return frame >= 4000 and set(ENEMY_TYPES) <= seen['kinds']  # Which kinds appear is random
 
-    assert play(script, quiet=False, max_frames=4000) == 'stopped'
+    assert play(script, quiet=False, max_frames=40000) == 'stopped'
     assert set(ENEMY_TYPES) <= seen['kinds']
 
 

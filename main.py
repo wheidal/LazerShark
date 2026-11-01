@@ -11,7 +11,7 @@ import math
 from player import Shark
 from player_enhanced import SharkWithSprites
 from obstacle import OBSTACLE_TYPES
-from food import SmallFish
+from food import SmallFish, ZombieFish
 from projectile import Laser, Missile, Torpedo
 from powerup import LaserPowerup, MissilePowerup, TorpedoPowerup, ShieldPowerup
 from particle import ParticleEmitter
@@ -22,6 +22,7 @@ from graphics_enhancements import (
 from settings_manager import SettingsManager
 from resources import resource_path
 from channel import ChannelDirector, BANK_DAMAGE, BANK_INVULN_MS, BANK_PUSH
+from hazards import RadiationCloud, SMALL_CLOUD_RADIUS, SMALL_CLOUD_STEPS, WHIRLPOOL_SPAWN_MS, Whirlpool
 from hud import Hud
 from shark_look import SharkLook
 from attract import AttractMode, Briefing
@@ -33,6 +34,8 @@ from weapons import WEAPONS, WeaponPowerup, WeaponState
 # The simulation always advances in 60 Hz steps, so game speed doesn't depend on frame rate
 STEP_MS = 1000 / 60
 MAX_STEPS_PER_FRAME = 5
+ZOMBIE_FISH_CHANCE = 0.2
+ZOMBIE_FISH_FROM_SCORE = 15
 RESTART_LOCK_MS = 1000  # Ignore restart input briefly so mashing fire can't skip Game Over
 
 
@@ -380,6 +383,9 @@ def main():
     projectiles = pygame.sprite.Group()
     powerups = pygame.sprite.Group()
     enemy_shots = pygame.sprite.Group()
+    drains = pygame.sprite.Group()
+    laser_jam = 0
+    whirlpool_timer = 0
     banks = pygame.sprite.Group()
     channel = start_channel(banks, all_sprites)
     bank_invuln = 0
@@ -458,6 +464,9 @@ def main():
                 projectiles.empty()
                 powerups.empty()
                 enemy_shots.empty()
+                drains.empty()
+                laser_jam = 0
+                whirlpool_timer = 0
                 banks.empty()
                 channel = start_channel(banks, all_sprites)
                 bank_invuln = 0
@@ -579,6 +588,13 @@ def main():
             projectiles.update()
             powerups.update()
             enemy_shots.update()
+            drains.update()
+            for sprite in obstacles.sprites():
+                if getattr(sprite, 'leaking', False):  # A barrel left too long
+                    cloud = RadiationCloud(sprite.rect.center)
+                    drains.add(cloud)
+                    all_sprites.add(cloud)
+                    sprite.kill()
             for sprite in obstacles.sprites():
                 if isinstance(sprite, Enemy):
                     enemy_shots.add(sprite.new_shots)
@@ -596,7 +612,8 @@ def main():
             shark.laser_energy = min(100, shark.laser_energy + LASER_RECHARGE[difficulty] * STEP_MS / 1000)
 
             # Firing controls (remapped + controller support)
-            if keys[keymap['fire']] or controller_fire:
+            laser_jam = max(0, laser_jam - dt)
+            if (keys[keymap['fire']] or controller_fire) and laser_jam <= 0:
                 # Easy mode: unlimited laser energy
                 if easy_mode:
                     shark.laser_energy = 100
@@ -656,7 +673,7 @@ def main():
                 channel.enter_arena(boss_class.arena_reef)
                 banner = boss_class.arrival
                 banner_timer = 4000
-            if boss_phase == 'approach' and channel.arena_ready and not obstacles and not enemy_shots:
+            if boss_phase == 'approach' and channel.arena_ready and not obstacles and not enemy_shots and not drains:
                 boss_phase = 'fight'
                 boss = BOSS_ROSTER[next_boss][0](*channel.arena_edges, difficulty)
                 print(f"{boss.name} ({difficulty}): health {boss.health}, bite {boss.bite_damage}, warning {boss.warn_steps} steps")
@@ -681,7 +698,8 @@ def main():
                         obstacles.add(new_obstacles)
                         all_sprites.add(new_obstacles)
                 else:
-                    fish = SmallFish(channel.spawn_x(26), -10)
+                    zombie = score >= ZOMBIE_FISH_FROM_SCORE and random.random() < ZOMBIE_FISH_CHANCE
+                    fish = (ZombieFish if zombie else SmallFish)(channel.spawn_x(26), -10)
                     foods.add(fish)
                     all_sprites.add(fish)
 
@@ -716,7 +734,22 @@ def main():
                         obstacles.add(new_enemies)
                         all_sprites.add(new_enemies)
 
+            # Whirlpools open up where there's room to swim around them
+            whirlpool_timer += dt
+            if whirlpool_timer > WHIRLPOOL_SPAWN_MS[difficulty] and boss_phase not in ('approach', 'fight'):
+                whirlpool_timer = 0
+                if channel.has_whirlpools():
+                    spawn_x = channel.spawn_x(Whirlpool.WIDTH, blocking=True, height=Whirlpool.HEIGHT)
+                    if spawn_x is not None:
+                        whirlpool = Whirlpool(spawn_x, -Whirlpool.HEIGHT)
+                        drains.add(whirlpool)
+                        all_sprites.add(whirlpool)
+
             # Scroll obstacles, food and powerups downward
+            for sprite in drains:
+                sprite.rect.y += 3
+                if sprite.rect.top > 600:
+                    sprite.kill()
             for sprite in obstacles:
                 sprite.rect.y += 3
                 if sprite.rect.top > 600:
@@ -744,6 +777,8 @@ def main():
             blown_up = []
             hit = pygame.sprite.spritecollide(shark, obstacles, False, pixels_touch)
             if hit:
+                if any(getattr(obstacle, 'jams_laser_ms', 0) for obstacle in hit):
+                    laser_jam = max(getattr(obstacle, 'jams_laser_ms', 0) for obstacle in hit)
                 if shield_active and shield_strength > 0:
                     shield_activate_sound.play()  # Play shield sound when it blocks damage
                     shield_strength -= sum(obstacle.damage for obstacle in hit)
@@ -925,6 +960,10 @@ def main():
                 print(f"{obs.name} destroyed!")
                 obstacle_destroy_sound.play()
                 score += obs.reward
+                if getattr(obs, 'leaves_cloud', False):
+                    cloud = RadiationCloud(obs.rect.center, SMALL_CLOUD_RADIUS, SMALL_CLOUD_STEPS)
+                    drains.add(cloud)
+                    all_sprites.add(cloud)
                 if obs.drops_pickup:
                     px = max(40, min(760, obs.rect.centerx))
                     p = random.choice([LaserPowerup(px, obs.rect.centery), MissilePowerup(px, obs.rect.centery),
@@ -1001,7 +1040,17 @@ def main():
                     boss = None
                     banner_timer = 3500
 
-            # A real hit, not the slow drain from swimming, costs a weapon level
+            # Radiation and whirlpools wear the shark down, straight through any shield
+            for hazard in drains:
+                drained = hazard.drain_on(shark.rect)
+                energy -= drained
+                if isinstance(hazard, RadiationCloud) and drained and random.random() < 0.2:
+                    emitter.emit(shark.rect.center, color=(150,255,90), count=2, size=5, speed=3, lifetime=14)
+                pull_x, pull_y = hazard.pull_on(shark.rect)
+                shark.rect.move_ip(round(pull_x), round(pull_y))
+            shark.rect.clamp_ip(screen.get_rect())
+
+            # A real hit, not a slow drain, costs a weapon level
             if energy_before_hits - energy > 1:
                 weapon.lose_level()
                 shark_look.hit()
@@ -1015,6 +1064,13 @@ def main():
 
             # Shark eats food: remove food and gain energy
             eaten = pygame.sprite.spritecollide(shark, foods, True)
+            for bad_fish in [fish for fish in eaten if fish.bite]:
+                eaten.remove(bad_fish)
+                energy -= bad_fish.bite
+                generic_collision_sound.play()
+                shark_look.hit()
+                graphics_enhancer.trigger_damage_effect()
+                print(f"A zombie fish bit back! Energy: {energy:.1f}")
             if eaten:
                 energy = min(energy + 20 * len(eaten), 100)
                 score += len(eaten)
@@ -1084,7 +1140,7 @@ def main():
         if boss:
             boss.draw(screen)
         hud.draw(screen, shark.rect, energy, shield_strength if shield_active else 0, shark.laser_energy,
-                 weapon.label, shark.missiles, shark.torpedoes, score, pygame.time.get_ticks())
+                 "EMP!" if laser_jam > 0 else weapon.label, shark.missiles, shark.torpedoes, score, pygame.time.get_ticks())
         if boss:
             hud.draw_boss_bar(screen, boss.name, boss.health / boss.max_health)
         if banner and banner_timer > 0:

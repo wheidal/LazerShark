@@ -116,8 +116,8 @@ def test_every_kind_keeps_clear_of_the_coast_in_play(play, monkeypatch):
             if pygame.sprite.spritecollideany(sprite, state['banks'], pygame.sprite.collide_mask):
                 seen['touches'] += 1
         state['energy'] = 100
-        return frame >= 3000
+        return frame >= 3000 and seen['kinds'] == set(OBSTACLE_TYPES)  # Which kinds appear is random
 
-    play(script, quiet=False, max_frames=3000)
+    play(script, quiet=False, max_frames=40000)
     assert seen['kinds'] == set(OBSTACLE_TYPES)
     assert seen['touches'] == 0
