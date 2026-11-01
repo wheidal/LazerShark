@@ -276,9 +276,9 @@ class EnhancedShark(AnimatedSprite):
                 if not move.get('left') and not move.get('right'):
                     self.is_moving = False
             
-            # Keep shark in bottom portion of screen (matches Shark class bounds)
+            # Keep the whole shark on screen, in the bottom portion
             self.rect.x = max(0, min(self.rect.x, 800 - self.rect.width))
-            self.rect.y = max(400, min(self.rect.y, 580))
+            self.rect.y = max(400, min(self.rect.y, 600 - self.rect.height))
             
             # Adjust animation speed based on movement
             if self.is_moving:

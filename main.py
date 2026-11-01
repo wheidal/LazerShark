@@ -22,6 +22,18 @@ from graphics_enhancements import (
 from settings_manager import SettingsManager
 from resources import resource_path
 
+# The simulation always advances in 60 Hz steps, so game speed doesn't depend on frame rate
+STEP_MS = 1000 / 60
+MAX_STEPS_PER_FRAME = 5
+RESTART_LOCK_MS = 1000  # Ignore restart input briefly so mashing fire can't skip Game Over
+
+
+class SilentSound:
+    """Stands in for every sound when no audio device is available"""
+
+    def play(self, *args, **kwargs):
+        pass
+
 
 def hits_shark_body(shark, other):
     """Pixel-accurate hazard check; the shark's rect is mostly transparent"""
@@ -30,6 +42,8 @@ def hits_shark_body(shark, other):
 
 def load_sound(filename):
     """Load a sound file from the sounds directory"""
+    if not pygame.mixer.get_init():
+        return SilentSound()
     try:
         sound_path = resource_path('sounds', filename)
         if os.path.exists(sound_path):
@@ -46,8 +60,12 @@ def load_sound(filename):
 def main():
     pygame.init()
     # --- Load Pre-rendered Sound Effects ---
-    pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
-    pygame.mixer.set_num_channels(8)  # Ensure enough channels for all sounds
+    try:
+        pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
+        pygame.mixer.set_num_channels(8)  # Ensure enough channels for all sounds
+    except pygame.error as e:
+        print(f"No audio device, continuing without sound: {e}")
+    audio_available = pygame.mixer.get_init() is not None
     
     print("Loading sound effects...")
     
@@ -202,10 +220,11 @@ def main():
                             easy_mode = not easy_mode
                         elif menu_items[selected] == 'Toggle Music':
                             music_enabled = not music_enabled
-                            if music_enabled:
-                                pygame.mixer.music.unpause()
-                            else:
-                                pygame.mixer.music.pause()
+                            if audio_available:
+                                if music_enabled:
+                                    pygame.mixer.music.unpause()
+                                else:
+                                    pygame.mixer.music.pause()
                         elif menu_items[selected] == 'Music Volume':
                             adjusting_volume = True
                         elif menu_items[selected] == 'Continue':
@@ -224,11 +243,13 @@ def main():
                     # Volume adjustment mode
                     if event.key == pygame.K_LEFT:
                         music_volume = max(0, music_volume - 0.1)
-                        pygame.mixer.music.set_volume(music_volume)
+                        if audio_available:
+                            pygame.mixer.music.set_volume(music_volume)
                         menu_beep_sound.play()
                     elif event.key == pygame.K_RIGHT:
                         music_volume = min(1.0, music_volume + 0.1)
-                        pygame.mixer.music.set_volume(music_volume)
+                        if audio_available:
+                            pygame.mixer.music.set_volume(music_volume)
                         menu_beep_sound.play()
                     elif event.key == pygame.K_RETURN or event.key == pygame.K_ESCAPE:
                         adjusting_volume = False
@@ -285,6 +306,8 @@ def main():
     sub_timer = 0
     reef_wall_timer = 0
     score = 0
+    restart_lock = 0
+    step_backlog = 0
 
     # Shield powerup state - Enhanced system
     shield_active = False
@@ -293,7 +316,9 @@ def main():
     next_shield_spawn = random.randint(180000, 300000)  # 3-5 min in ms
     
     # Start background music
-    if os.path.exists(background_music_path):
+    if not audio_available:
+        music_enabled = False
+    elif os.path.exists(background_music_path):
         pygame.mixer.music.load(background_music_path)
         pygame.mixer.music.set_volume(music_volume)
         if music_enabled:
@@ -304,95 +329,64 @@ def main():
         music_enabled = False
     
     # Start ambient ocean sound loop on a dedicated channel
-    ambient_channel = pygame.mixer.Channel(7)  # Use last channel for ambient
-    ambient_channel.set_volume(sfx_volume * 0.3)  # Ambient at 30% of SFX volume
-    ambient_channel.play(ambient_ocean_sound, loops=-1)  # Loop indefinitely
+    if audio_available:
+        ambient_channel = pygame.mixer.Channel(7)  # Use last channel for ambient
+        ambient_channel.set_volume(sfx_volume * 0.3)  # Ambient at 30% of SFX volume
+        ambient_channel.play(ambient_ocean_sound, loops=-1)  # Loop indefinitely
     
     while running:
-        dt = clock.tick(60)
-
-        # Update graphics enhancer
-        graphics_enhancer.update(dt)
-        enhanced_particles.update()
-
-        if upgrade_active:
-            upgrade_timer -= dt
-            if upgrade_timer <= 0:
-                upgrade_active = False
+        frame_ms = clock.tick(60)
+        restart_requested = False
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
+                # Esc always exits, so a bad remap can't trap the player
+                if event.key in (pygame.K_ESCAPE, keymap['quit']):
                     running = False
-                if event.key == pygame.K_p:
+                elif event.key == keymap['pause'] and not game_over:
                     paused = not paused
-            # Controller pause button (Start button - typically button 7 or 9)
+                elif game_over:
+                    restart_requested = True
             if event.type == pygame.JOYBUTTONDOWN and controller_enabled and controller:
                 if event.button == 7 or event.button == 9:  # Start button on most controllers
-                    paused = not paused
-            if game_over:
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
+                    if game_over:
                         running = False
                     else:
-                        # Restart game
-                        try:
-                            shark = SharkWithSprites(400, 580)
-                        except Exception:
-                            shark = Shark(400, 580)
-                        all_sprites = pygame.sprite.Group(shark)
-                        obstacles.empty()
-                        foods.empty()
-                        projectiles.empty()
-                        powerups.empty()
-                        subs.empty()
-                        particles.empty()
-                        enhanced_particles.empty()
-                        energy = 100
-                        spawn_timer = 0
-                        powerup_timer = 0
-                        sub_timer = 0
-                        shield_active = False
-                        shield_strength = 0
-                        upgrade_active = False
-                        upgrade_timer = 0
-                        obstacles_destroyed = 0
-                        destroyed_counts = {}
-                        score = 0
-                        reef_wall_timer = 0
-                        game_over = False
-                # Controller support for game restart
-                elif event.type == pygame.JOYBUTTONDOWN and controller_enabled and controller:
-                    if event.button == 7 or event.button == 9:  # Start button - exit game
-                        running = False
-                    else:  # Any other button - restart game
-                        try:
-                            shark = SharkWithSprites(400, 580)
-                        except Exception:
-                            shark = Shark(400, 580)
-                        all_sprites = pygame.sprite.Group(shark)
-                        obstacles.empty()
-                        foods.empty()
-                        projectiles.empty()
-                        powerups.empty()
-                        subs.empty()
-                        particles.empty()
-                        enhanced_particles.empty()
-                        energy = 100
-                        spawn_timer = 0
-                        powerup_timer = 0
-                        sub_timer = 0
-                        shield_active = False
-                        shield_strength = 0
-                        upgrade_active = False
-                        upgrade_timer = 0
-                        obstacles_destroyed = 0
-                        destroyed_counts = {}
-                        score = 0
-                        reef_wall_timer = 0
-                        game_over = False
+                        paused = not paused
+                elif game_over:
+                    restart_requested = True
+
+        if game_over:
+            restart_lock -= frame_ms
+            if restart_requested and restart_lock <= 0:
+                try:
+                    shark = SharkWithSprites(400, 580)
+                except Exception:
+                    shark = Shark(400, 580)
+                all_sprites = pygame.sprite.Group(shark)
+                obstacles.empty()
+                foods.empty()
+                projectiles.empty()
+                powerups.empty()
+                subs.empty()
+                particles.empty()
+                enhanced_particles.empty()
+                energy = 100
+                spawn_timer = 0
+                powerup_timer = 0
+                sub_timer = 0
+                shield_active = False
+                shield_strength = 0
+                upgrade_active = False
+                upgrade_timer = 0
+                obstacles_destroyed = 0
+                destroyed_counts = {}
+                score = 0
+                reef_wall_timer = 0
+                step_backlog = 0
+                game_over = False
         if game_over:
             screen.fill((0, 0, 64))
             if controller_enabled and controller:
@@ -405,7 +399,7 @@ def main():
                 # Show keyboard instructions
                 game_over_text = font.render("Game Over! Press any key to play again or ESC to exit.", True, (255, 0, 0))
                 screen.blit(game_over_text, (80, 280))
-            energy_text = font.render(f"Final Energy: {int(energy)}", True, (255, 255, 255))
+            energy_text = font.render(f"Final Energy: {max(0, int(energy))}", True, (255, 255, 255))
             screen.blit(energy_text, (300, 320))
             final_score_text = font.render(f"Final Score: {score}", True, (255, 255, 0))
             screen.blit(final_score_text, (300, 350))
@@ -418,390 +412,414 @@ def main():
                 pause_text = font.render("Paused - Press Start to resume", True, (255, 255, 0))
                 screen.blit(pause_text, (200, 280))
             else:
-                pause_text = font.render("Paused - Press 'P' to resume", True, (255, 255, 0))
+                pause_text = font.render(f"Paused - Press '{pygame.key.name(keymap['pause']).upper()}' to resume", True, (255, 255, 0))
                 screen.blit(pause_text, (220, 280))
             pygame.display.flip()
             continue
 
-        keys = pygame.key.get_pressed()
-        
-        # Controller support
-        controller_fire = False
-        controller_missile = False
-        controller_torpedo = False
-        
-        if controller_enabled and controller:
-            # Get controller input
-            # Left stick for movement (axis 0 = left/right, axis 1 = up/down)
-            x_axis = controller.get_axis(0) if controller.get_numaxes() > 0 else 0
-            y_axis = controller.get_axis(1) if controller.get_numaxes() > 1 else 0
-            
-            # Deadzone to prevent drift
-            deadzone = 0.2
-            if abs(x_axis) < deadzone:
-                x_axis = 0
-            if abs(y_axis) < deadzone:
-                y_axis = 0
-            
-            # Controller button mapping (common gamepad layout)
-            # Button 0 (A/X) = Fire laser
-            # Button 1 (B/Circle) = Fire missile  
-            # Button 2 (X/Square) = Fire torpedo
-            # Button 7 (Start) = Pause
-            controller_fire = controller.get_button(0) if controller.get_numbuttons() > 0 else False
-            controller_missile = controller.get_button(1) if controller.get_numbuttons() > 1 else False
-            controller_torpedo = controller.get_button(2) if controller.get_numbuttons() > 2 else False
-            
-            # Use controller or keyboard input
-            move = {
-                'left': keys[keymap['left']] or x_axis < 0,
-                'right': keys[keymap['right']] or x_axis > 0,
-                'up': keys[keymap['up']] or y_axis < 0,
-                'down': keys[keymap['down']] or y_axis > 0
-            }
-        else:
-            # Use remapped keys for movement and actions
-            move = {
-            'left': keys[keymap['left']],
-            'right': keys[keymap['right']],
-            'up': keys[keymap['up']],
-            'down': keys[keymap['down']]
-        }
-        # Update shark with movement input
-        if hasattr(shark, 'update_with_input'):
-            shark.update_with_input(move, dt)
-        else:
-            shark.update(dt, move)
-        obstacles.update()
-        foods.update()
-        projectiles.update()
-        powerups.update()
-        subs.update()
-        for sub in subs:
-            for supply in sub.pending_drops:
-                powerups.add(supply)
-                all_sprites.add(supply)
-            sub.pending_drops.clear()
-        particles.update()
+        graphics_enhancer.update(frame_ms)
 
-        # Firing controls (remapped + controller support)
-        if keys[keymap['fire']] or controller_fire:
-            # Easy mode: unlimited laser energy
-            if easy_mode:
-                shark.laser_energy = 100
-            if shark.fire_laser():
-                if upgrade_active:
-                    for offset in [-12, 0, 12]:
-                        laser = Laser(shark.rect.centerx + offset, shark.rect.top)
+        step_backlog += frame_ms
+        steps = round(step_backlog / STEP_MS)
+        if steps > MAX_STEPS_PER_FRAME:  # Too far behind to catch up: slow down instead
+            steps = MAX_STEPS_PER_FRAME
+            step_backlog = 0
+        else:
+            step_backlog -= steps * STEP_MS
+
+        for _ in range(steps):
+            dt = STEP_MS
+            enhanced_particles.update()
+
+            if upgrade_active:
+                upgrade_timer -= dt
+                if upgrade_timer <= 0:
+                    upgrade_active = False
+
+            keys = pygame.key.get_pressed()
+        
+            # Controller support
+            controller_fire = False
+            controller_missile = False
+            controller_torpedo = False
+        
+            if controller_enabled and controller:
+                # Get controller input
+                # Left stick for movement (axis 0 = left/right, axis 1 = up/down)
+                x_axis = controller.get_axis(0) if controller.get_numaxes() > 0 else 0
+                y_axis = controller.get_axis(1) if controller.get_numaxes() > 1 else 0
+            
+                # Deadzone to prevent drift
+                deadzone = 0.2
+                if abs(x_axis) < deadzone:
+                    x_axis = 0
+                if abs(y_axis) < deadzone:
+                    y_axis = 0
+            
+                # Controller button mapping (common gamepad layout)
+                # Button 0 (A/X) = Fire laser
+                # Button 1 (B/Circle) = Fire missile  
+                # Button 2 (X/Square) = Fire torpedo
+                # Button 7 (Start) = Pause
+                controller_fire = controller.get_button(0) if controller.get_numbuttons() > 0 else False
+                controller_missile = controller.get_button(1) if controller.get_numbuttons() > 1 else False
+                controller_torpedo = controller.get_button(2) if controller.get_numbuttons() > 2 else False
+            
+                # Use controller or keyboard input
+                move = {
+                    'left': keys[keymap['left']] or x_axis < 0,
+                    'right': keys[keymap['right']] or x_axis > 0,
+                    'up': keys[keymap['up']] or y_axis < 0,
+                    'down': keys[keymap['down']] or y_axis > 0
+                }
+            else:
+                # Use remapped keys for movement and actions
+                move = {
+                'left': keys[keymap['left']],
+                'right': keys[keymap['right']],
+                'up': keys[keymap['up']],
+                'down': keys[keymap['down']]
+            }
+            # Update shark with movement input
+            if hasattr(shark, 'update_with_input'):
+                shark.update_with_input(move, dt)
+            else:
+                shark.update(dt, move)
+            obstacles.update()
+            foods.update()
+            projectiles.update()
+            powerups.update()
+            subs.update()
+            for sub in subs:
+                for supply in sub.pending_drops:
+                    powerups.add(supply)
+                    all_sprites.add(supply)
+                sub.pending_drops.clear()
+            particles.update()
+
+            # Firing controls (remapped + controller support)
+            if keys[keymap['fire']] or controller_fire:
+                # Easy mode: unlimited laser energy
+                if easy_mode:
+                    shark.laser_energy = 100
+                if shark.fire_laser():
+                    if upgrade_active:
+                        for offset in [-12, 0, 12]:
+                            laser = Laser(shark.rect.centerx + offset, shark.rect.top)
+                            projectiles.add(laser)
+                            all_sprites.add(laser)
+                        laser_triple_sound.play()  # Different sound for triple laser
+                    else:
+                        laser = Laser(shark.rect.centerx, shark.rect.top)
                         projectiles.add(laser)
                         all_sprites.add(laser)
-                    laser_triple_sound.play()  # Different sound for triple laser
+                        laser_sound.play()
+                        # Add laser trail effect
+                        ParticleEffects.create_trail(enhanced_particles, 
+                                                    (shark.rect.centerx, shark.rect.top),
+                                                    (0, -1), (255, 100, 100))
+            if keys[keymap['missile']] or controller_missile:
+                if shark.fire_missile():
+                    missile = Missile(shark.rect.centerx, shark.rect.top)
+                    projectiles.add(missile)
+                    all_sprites.add(missile)
+                    missile_sound.play()
+            if keys[keymap['torpedo']] or controller_torpedo:
+                if shark.fire_torpedo():
+                    # Find nearest obstacle
+                    nearest = None
+                    min_dist = float('inf')
+                    for obs in obstacles:
+                        dist = abs(obs.rect.centerx - shark.rect.centerx) + abs(obs.rect.centery - shark.rect.centery)
+                        if dist < min_dist:
+                            min_dist = dist
+                            nearest = obs
+                    torpedo = Torpedo(shark.rect.centerx, shark.rect.top, target=nearest)
+                    projectiles.add(torpedo)
+                    all_sprites.add(torpedo)
+                    torpedo_sound.play()
+
+            # Energy drains while swimming (remapped) - Rebalanced for better gameplay
+            if move['left'] or move['right'] or move['up'] or move['down']:
+                energy -= 0.06  # Reduced from 0.08 for better balance
+            else:
+                energy -= 0.02  # Idle drain
+            energy = max(0, min(energy, 100))
+
+            # Spawn obstacles and food every 1.5 seconds
+            spawn_timer += dt
+            if spawn_timer > 1500:
+                spawn_timer = 0
+                spawn_x = random.randint(40, 760)
+                choice = random.choice(['coral', 'shipwreck', 'fish', 'fish'])  # 50% fish, 50% obstacles
+                if choice == 'coral':
+                    coral = CoralReef(spawn_x, -24)
+                    obstacles.add(coral)
+                    all_sprites.add(coral)
+                elif choice == 'shipwreck':
+                    wreck = Shipwreck(spawn_x, -28)
+                    obstacles.add(wreck)
+                    all_sprites.add(wreck)
                 else:
-                    laser = Laser(shark.rect.centerx, shark.rect.top)
-                    projectiles.add(laser)
-                    all_sprites.add(laser)
-                    laser_sound.play()
-                    # Add laser trail effect
-                    ParticleEffects.create_trail(enhanced_particles, 
-                                                (shark.rect.centerx, shark.rect.top),
-                                                (0, -1), (255, 100, 100))
-        if keys[keymap['missile']] or controller_missile:
-            if shark.fire_missile():
-                missile = Missile(shark.rect.centerx, shark.rect.top)
-                projectiles.add(missile)
-                all_sprites.add(missile)
-                missile_sound.play()
-        if keys[keymap['torpedo']] or controller_torpedo:
-            if shark.fire_torpedo():
-                # Find nearest obstacle
-                nearest = None
-                min_dist = float('inf')
-                for obs in obstacles:
-                    dist = abs(obs.rect.centerx - shark.rect.centerx) + abs(obs.rect.centery - shark.rect.centery)
-                    if dist < min_dist:
-                        min_dist = dist
-                        nearest = obs
-                torpedo = Torpedo(shark.rect.centerx, shark.rect.top, target=nearest)
-                projectiles.add(torpedo)
-                all_sprites.add(torpedo)
-                torpedo_sound.play()
+                    fish = SmallFish(spawn_x, -10)
+                    foods.add(fish)
+                    all_sprites.add(fish)
 
-        # Energy drains while swimming (remapped) - Rebalanced for better gameplay
-        if move['left'] or move['right'] or move['up'] or move['down']:
-            energy -= 0.06  # Reduced from 0.08 for better balance
-        else:
-            energy -= 0.02  # Idle drain
-        energy = max(0, min(energy, 100))
+            # Spawn powerups every 4 seconds
+            powerup_timer += dt
+            if powerup_timer > 4000:
+                powerup_timer = 0
+                px = random.randint(40, 760)
+                ptype = random.choice(['laser', 'missile', 'torpedo'])
+                if ptype == 'laser':
+                    p = LaserPowerup(px, -16)
+                elif ptype == 'missile':
+                    p = MissilePowerup(px, -16)
+                else:
+                    p = TorpedoPowerup(px, -16)
+                powerups.add(p)
+                all_sprites.add(p)
 
-        # Spawn obstacles and food every 1.5 seconds
-        spawn_timer += dt
-        if spawn_timer > 1500:
-            spawn_timer = 0
-            spawn_x = random.randint(40, 760)
-            choice = random.choice(['coral', 'shipwreck', 'fish', 'fish'])  # 50% fish, 50% obstacles
-            if choice == 'coral':
-                coral = CoralReef(spawn_x, -24)
-                obstacles.add(coral)
-                all_sprites.add(coral)
-            elif choice == 'shipwreck':
-                wreck = Shipwreck(spawn_x, -28)
-                obstacles.add(wreck)
-                all_sprites.add(wreck)
-            else:
-                fish = SmallFish(spawn_x, -10)
-                foods.add(fish)
-                all_sprites.add(fish)
+            # Spawn friendly submarine every 12 seconds
+            sub_timer += dt
+            if sub_timer > 12000:
+                sub_timer = 0
+                sx = random.randint(60, 740)
+                sub = FriendlySubmarine(sx, -18)
+                subs.add(sub)
+                all_sprites.add(sub)
 
-        # Spawn powerups every 4 seconds
-        powerup_timer += dt
-        if powerup_timer > 4000:
-            powerup_timer = 0
-            px = random.randint(40, 760)
-            ptype = random.choice(['laser', 'missile', 'torpedo'])
-            if ptype == 'laser':
-                p = LaserPowerup(px, -16)
-            elif ptype == 'missile':
-                p = MissilePowerup(px, -16)
-            else:
-                p = TorpedoPowerup(px, -16)
-            powerups.add(p)
-            all_sprites.add(p)
+            # Spawn reef wall every 5 seconds; coverage grows at half the rate of score
+            reef_wall_timer += dt
+            if reef_wall_timer > 5000:
+                reef_wall_timer = 0
+                reef_coverage = min(0.30 + score * 0.005, 0.70)
+                for seg in create_reef_wall(reef_coverage):
+                    obstacles.add(seg)
+                    all_sprites.add(seg)
 
-        # Spawn friendly submarine every 12 seconds
-        sub_timer += dt
-        if sub_timer > 12000:
-            sub_timer = 0
-            sx = random.randint(60, 740)
-            sub = FriendlySubmarine(sx, -18)
-            subs.add(sub)
-            all_sprites.add(sub)
+            # Scroll obstacles, food, powerups, and subs downward
+            for sprite in obstacles:
+                sprite.rect.y += 3
+                if sprite.rect.top > 600:
+                    sprite.kill()
+            for sprite in foods:
+                sprite.rect.y += 3
+                if sprite.rect.top > 600:
+                    sprite.kill()
+            for sprite in powerups:
+                sprite.rect.y += 3
+                if sprite.rect.top > 600:
+                    sprite.kill()
+            for sprite in subs:
+                if sprite.rect.top > 600:
+                    sprite.kill()
 
-        # Spawn reef wall every 5 seconds; coverage grows at half the rate of score
-        reef_wall_timer += dt
-        if reef_wall_timer > 5000:
-            reef_wall_timer = 0
-            reef_coverage = min(0.30 + score * 0.005, 0.70)
-            for seg in create_reef_wall(reef_coverage):
-                obstacles.add(seg)
-                all_sprites.add(seg)
-
-        # Scroll obstacles, food, powerups, and subs downward
-        for sprite in obstacles:
-            sprite.rect.y += 3
-            if sprite.rect.top > 600:
-                sprite.kill()
-        for sprite in foods:
-            sprite.rect.y += 3
-            if sprite.rect.top > 600:
-                sprite.kill()
-        for sprite in powerups:
-            sprite.rect.y += 3
-            if sprite.rect.top > 600:
-                sprite.kill()
-        for sprite in subs:
-            if sprite.rect.top > 600:
-                sprite.kill()
-
-        # Collision detection
-        # Shark hits obstacle: lose a third of energy per hit
-        hit = pygame.sprite.spritecollide(shark, obstacles, False, hits_shark_body)
-        if hit:
-            if shield_active and shield_strength > 0:
-                shield_activate_sound.play()  # Play shield sound when it blocks damage
-                shield_strength -= 33  # Reduce shield by 1/3 per collision
-                print(f"Shield protected the shark! Shield strength: {shield_strength:.1f}")
+            # Collision detection
+            # Shark hits obstacle: lose a third of energy per hit
+            hit = pygame.sprite.spritecollide(shark, obstacles, False, hits_shark_body)
+            if hit:
+                if shield_active and shield_strength > 0:
+                    shield_activate_sound.play()  # Play shield sound when it blocks damage
+                    shield_strength -= 33  # Reduce shield by 1/3 per collision
+                    print(f"Shield protected the shark! Shield strength: {shield_strength:.1f}")
                 
-                # Check if shield is depleted
-                if shield_strength <= 0:
-                    shield_active = False
-                    shield_strength = 0
-                    print("Shield depleted! Spawning replacement powerups...")
-                    # Spawn 2-3 shield powerups when shield breaks
-                    for i in range(random.randint(2, 3)):
-                        px = random.randint(40, 760)
-                        shield_powerup = ShieldPowerup(px, -16 - i * 30)  # Stagger spawn positions
-                        powerups.add(shield_powerup)
-                        all_sprites.add(shield_powerup)
-                
-                for obstacle in hit:
-                    # Enhanced explosion effect for shield-blocked obstacles
-                    ParticleEffects.create_explosion(enhanced_particles, obstacle.rect.center,
-                                                    [(100, 200, 255), (150, 220, 255), (200, 240, 255)], 25)
-                    emitter.emit(obstacle.rect.center, color=(200,255,255), count=18, size=10, speed=5, lifetime=24)
-                    obstacle.kill()
-            else:
-                energy -= 33
-                
-                # Play appropriate collision sound based on obstacle type
-                for obstacle in hit:
-                    obstacle_name = getattr(obstacle, 'name', 'Unknown')
-                    if 'Coral' in obstacle_name:
-                        coral_collision_sound.play()
-                        print(f"Playing coral collision sound for {obstacle_name}!")
-                    elif 'Shipwreck' in obstacle_name:
-                        shipwreck_collision_sound.play()
-                        print(f"Playing shipwreck collision sound for {obstacle_name}!")
-                    else:
-                        generic_collision_sound.play()
-                        print(f"Playing generic collision sound for {obstacle_name}!")
-                    
-                    print(f"Ouch! Shark hit an obstacle: {obstacle_name}. Energy: {energy:.1f}")
-                    obstacle.kill()
-                    
-                    # Enhanced explosion effect
-                    ParticleEffects.create_explosion(enhanced_particles, obstacle.rect.center,
-                                                    [(255, 100, 0), (255, 200, 0), (255, 255, 100)], 30)
-                    
-                emitter.emit(shark.rect.center, color=(255,255,0), count=16, size=12, speed=6, lifetime=22)
-                # Trigger damage flash effect
-                graphics_enhancer.trigger_damage_effect()
-                if energy <= 0:
-                    fatal_collision_sound.play()  # Different sound for fatal collision
-                    emitter.emit(shark.rect.center, color=(255,0,0), count=32, size=18, speed=8, lifetime=32)
-                    game_over = True
-                    # Let fatal collision particles finish before pausing
-                    particle_wait = True
-                    particle_timer = 0
-                    while particle_wait:
-                        dt = clock.tick(60)
-                        particle_timer += dt
-                        screen.fill((0, 0, 64))
-                        all_sprites.draw(screen)
-                        particles.update()
-                        particles.draw(screen)
-                        pygame.display.flip()
-                        # Wait until all particles are gone or 1.5 seconds have passed
-                        if len(particles) == 0 or particle_timer > 1500:
-                            particle_wait = False
-                        for event in pygame.event.get():
-                            if event.type == pygame.QUIT:
-                                pygame.quit()
-                                sys.exit()
-                    pygame.event.clear()  # Discard buffered events from the animation wait
-
-        # Laser hits coral reefs and shipwrecks: increment hit counter, break after 3 hits
-        for laser in [s for s in projectiles if isinstance(s, Laser)]:
-            obs_hit = pygame.sprite.spritecollide(laser, obstacles, False)
-            for obs in obs_hit:
-                if hasattr(obs, 'hits'):
-                    obs.hits += 1
-                    laser.kill()
-                    if obs.hits >= 3:
-                        emitter.emit(obs.rect.center, color=(255,200,0), count=18, size=8, speed=4, lifetime=24)
-                        print(f"{getattr(obs, 'name', 'Obstacle')} destroyed by lasers!")
-                        obs_type = getattr(obs, 'name', type(obs).__name__)
-                        destroyed_counts[obs_type] = destroyed_counts.get(obs_type, 0) + 1
-                        if destroyed_counts[obs_type] == 4 and not shield_active:
+                    # Check if shield is depleted
+                    if shield_strength <= 0:
+                        shield_active = False
+                        shield_strength = 0
+                        print("Shield depleted! Spawning replacement powerups...")
+                        # Spawn 2-3 shield powerups when shield breaks
+                        for i in range(random.randint(2, 3)):
                             px = random.randint(40, 760)
-                            shield_powerup = ShieldPowerup(px, -16)
+                            shield_powerup = ShieldPowerup(px, -16 - i * 30)  # Stagger spawn positions
                             powerups.add(shield_powerup)
                             all_sprites.add(shield_powerup)
-                            destroyed_counts[obs_type] = 0
-                        obstacles_destroyed += 1
-                        if obstacles_destroyed >= 5 and not upgrade_active:
-                            upgrade_active = True
-                            upgrade_timer = 10000
-                            obstacles_destroyed = 0
-                            upgrade_activate_sound.play()
-                        obstacle_destroy_sound.play()
-                        obs.kill()
-                        score += 3
+                
+                    for obstacle in hit:
+                        # Enhanced explosion effect for shield-blocked obstacles
+                        ParticleEffects.create_explosion(enhanced_particles, obstacle.rect.center,
+                                                        [(100, 200, 255), (150, 220, 255), (200, 240, 255)], 25)
+                        emitter.emit(obstacle.rect.center, color=(200,255,255), count=18, size=10, speed=5, lifetime=24)
+                        obstacle.kill()
+                else:
+                    energy -= 33
+                
+                    # Play appropriate collision sound based on obstacle type
+                    for obstacle in hit:
+                        obstacle_name = getattr(obstacle, 'name', 'Unknown')
+                        if 'Coral' in obstacle_name:
+                            coral_collision_sound.play()
+                            print(f"Playing coral collision sound for {obstacle_name}!")
+                        elif 'Shipwreck' in obstacle_name:
+                            shipwreck_collision_sound.play()
+                            print(f"Playing shipwreck collision sound for {obstacle_name}!")
+                        else:
+                            generic_collision_sound.play()
+                            print(f"Playing generic collision sound for {obstacle_name}!")
+                    
+                        print(f"Ouch! Shark hit an obstacle: {obstacle_name}. Energy: {energy:.1f}")
+                        obstacle.kill()
+                    
+                        # Enhanced explosion effect
+                        ParticleEffects.create_explosion(enhanced_particles, obstacle.rect.center,
+                                                        [(255, 100, 0), (255, 200, 0), (255, 255, 100)], 30)
+                    
+                    emitter.emit(shark.rect.center, color=(255,255,0), count=16, size=12, speed=6, lifetime=22)
+                    # Trigger damage flash effect
+                    graphics_enhancer.trigger_damage_effect()
+                    if energy <= 0:
+                        fatal_collision_sound.play()  # Different sound for fatal collision
+                        emitter.emit(shark.rect.center, color=(255,0,0), count=32, size=18, speed=8, lifetime=32)
+                        game_over = True
+                        restart_lock = RESTART_LOCK_MS
+                        # Let fatal collision particles finish before pausing
+                        particle_wait = True
+                        particle_timer = 0
+                        while particle_wait:
+                            dt = clock.tick(60)
+                            particle_timer += dt
+                            screen.fill((0, 0, 64))
+                            all_sprites.draw(screen)
+                            particles.update()
+                            particles.draw(screen)
+                            pygame.display.flip()
+                            # Wait until all particles are gone or 1.5 seconds have passed
+                            if len(particles) == 0 or particle_timer > 1500:
+                                particle_wait = False
+                            for event in pygame.event.get():
+                                if event.type == pygame.QUIT:
+                                    pygame.quit()
+                                    sys.exit()
+                        pygame.event.clear()  # Discard buffered events from the animation wait
 
-        # Missile hits any obstacle: destroy obstacle with one hit
-        for missile in [s for s in projectiles if isinstance(s, Missile)]:
-            obs_hit = pygame.sprite.spritecollide(missile, obstacles, False)
-            for obs in obs_hit:
-                emitter.emit(obs.rect.center, color=(255,128,0), count=22, size=10, speed=5, lifetime=28)
-                print(f"{getattr(obs, 'name', 'Obstacle')} destroyed by missile!")
-                obs_type = getattr(obs, 'name', type(obs).__name__)
-                destroyed_counts[obs_type] = destroyed_counts.get(obs_type, 0) + 1
-                if destroyed_counts[obs_type] == 4 and not shield_active:
-                    px = random.randint(40, 760)
-                    shield_powerup = ShieldPowerup(px, -16)
-                    powerups.add(shield_powerup)
-                    all_sprites.add(shield_powerup)
-                    destroyed_counts[obs_type] = 0
-                obstacles_destroyed += 1
-                if obstacles_destroyed >= 5 and not upgrade_active:
-                    upgrade_active = True
-                    upgrade_timer = 10000
-                    obstacles_destroyed = 0
-                    upgrade_activate_sound.play()
-                obstacle_destroy_sound.play()
-                obs.kill()
-                missile.kill()
-                score += 3
+            # Laser hits coral reefs and shipwrecks: increment hit counter, break after 3 hits
+            for laser in [s for s in projectiles if isinstance(s, Laser)]:
+                obs_hit = pygame.sprite.spritecollide(laser, obstacles, False)
+                for obs in obs_hit:
+                    if hasattr(obs, 'hits'):
+                        obs.hits += 1
+                        laser.kill()
+                        if obs.hits >= 3:
+                            emitter.emit(obs.rect.center, color=(255,200,0), count=18, size=8, speed=4, lifetime=24)
+                            print(f"{getattr(obs, 'name', 'Obstacle')} destroyed by lasers!")
+                            obs_type = getattr(obs, 'name', type(obs).__name__)
+                            destroyed_counts[obs_type] = destroyed_counts.get(obs_type, 0) + 1
+                            if destroyed_counts[obs_type] >= 4 and not shield_active:
+                                px = random.randint(40, 760)
+                                shield_powerup = ShieldPowerup(px, -16)
+                                powerups.add(shield_powerup)
+                                all_sprites.add(shield_powerup)
+                                destroyed_counts[obs_type] = 0
+                            obstacles_destroyed += 1
+                            if obstacles_destroyed >= 5 and not upgrade_active:
+                                upgrade_active = True
+                                upgrade_timer = 10000
+                                obstacles_destroyed = 0
+                                upgrade_activate_sound.play()
+                            obstacle_destroy_sound.play()
+                            obs.kill()
+                            score += 3
 
-        # Torpedo hits any obstacle: destroy obstacle with one hit
-        for torpedo in [s for s in projectiles if isinstance(s, Torpedo)]:
-            obs_hit = pygame.sprite.spritecollide(torpedo, obstacles, False)
-            for obs in obs_hit:
-                emitter.emit(obs.rect.center, color=(0,255,255), count=26, size=12, speed=6, lifetime=32)
-                print(f"{getattr(obs, 'name', 'Obstacle')} destroyed by torpedo!")
-                obs_type = getattr(obs, 'name', type(obs).__name__)
-                destroyed_counts[obs_type] = destroyed_counts.get(obs_type, 0) + 1
-                if destroyed_counts[obs_type] == 4 and not shield_active:
-                    px = random.randint(40, 760)
-                    shield_powerup = ShieldPowerup(px, -16)
-                    powerups.add(shield_powerup)
-                    all_sprites.add(shield_powerup)
-                    destroyed_counts[obs_type] = 0
-                obstacles_destroyed += 1
-                if obstacles_destroyed >= 5 and not upgrade_active:
-                    upgrade_active = True
-                    upgrade_timer = 10000
-                    obstacles_destroyed = 0
-                    upgrade_activate_sound.play()
-                obstacle_destroy_sound.play()
-                obs.kill()
-                torpedo.kill()
-                score += 3
+            # Missile hits any obstacle: destroy obstacle with one hit
+            for missile in [s for s in projectiles if isinstance(s, Missile)]:
+                obs_hit = pygame.sprite.spritecollide(missile, obstacles, False)
+                for obs in obs_hit:
+                    emitter.emit(obs.rect.center, color=(255,128,0), count=22, size=10, speed=5, lifetime=28)
+                    print(f"{getattr(obs, 'name', 'Obstacle')} destroyed by missile!")
+                    obs_type = getattr(obs, 'name', type(obs).__name__)
+                    destroyed_counts[obs_type] = destroyed_counts.get(obs_type, 0) + 1
+                    if destroyed_counts[obs_type] >= 4 and not shield_active:
+                        px = random.randint(40, 760)
+                        shield_powerup = ShieldPowerup(px, -16)
+                        powerups.add(shield_powerup)
+                        all_sprites.add(shield_powerup)
+                        destroyed_counts[obs_type] = 0
+                    obstacles_destroyed += 1
+                    if obstacles_destroyed >= 5 and not upgrade_active:
+                        upgrade_active = True
+                        upgrade_timer = 10000
+                        obstacles_destroyed = 0
+                        upgrade_activate_sound.play()
+                    obstacle_destroy_sound.play()
+                    obs.kill()
+                    missile.kill()
+                    score += 3
 
-        # Shark eats food: remove food and gain energy
-        eaten = pygame.sprite.spritecollide(shark, foods, True)
-        if eaten:
-            energy = min(energy + 20 * len(eaten), 100)
-            score += len(eaten)
-            food_eat_sound.play()
-            print(f"Yum! Shark ate {len(eaten)} fish. Energy: {energy:.1f}")
+            # Torpedo hits any obstacle: destroy obstacle with one hit
+            for torpedo in [s for s in projectiles if isinstance(s, Torpedo)]:
+                obs_hit = pygame.sprite.spritecollide(torpedo, obstacles, False)
+                for obs in obs_hit:
+                    emitter.emit(obs.rect.center, color=(0,255,255), count=26, size=12, speed=6, lifetime=32)
+                    print(f"{getattr(obs, 'name', 'Obstacle')} destroyed by torpedo!")
+                    obs_type = getattr(obs, 'name', type(obs).__name__)
+                    destroyed_counts[obs_type] = destroyed_counts.get(obs_type, 0) + 1
+                    if destroyed_counts[obs_type] >= 4 and not shield_active:
+                        px = random.randint(40, 760)
+                        shield_powerup = ShieldPowerup(px, -16)
+                        powerups.add(shield_powerup)
+                        all_sprites.add(shield_powerup)
+                        destroyed_counts[obs_type] = 0
+                    obstacles_destroyed += 1
+                    if obstacles_destroyed >= 5 and not upgrade_active:
+                        upgrade_active = True
+                        upgrade_timer = 10000
+                        obstacles_destroyed = 0
+                        upgrade_activate_sound.play()
+                    obstacle_destroy_sound.play()
+                    obs.kill()
+                    torpedo.kill()
+                    score += 3
 
-        # Shark collects powerups
-        collected = pygame.sprite.spritecollide(shark, powerups, True)
-        for p in collected:
-            if isinstance(p, LaserPowerup):
-                shark.laser_energy = min(shark.laser_energy + 30, 100)
-                powerup_collect_sound.play()
-                print("Laser energy powerup collected!")
-            elif isinstance(p, MissilePowerup):
-                shark.missiles = min(shark.missiles + 2, 3)
-                powerup_collect_sound.play()
-                print("Missile powerup collected!")
-            elif isinstance(p, TorpedoPowerup):
-                shark.torpedoes = min(shark.torpedoes + 1, 3)
-                powerup_collect_sound.play()
-                print("Torpedo powerup collected!")
-            elif isinstance(p, ShieldPowerup):
-                shield_active = True
-                shield_strength = 100  # Full strength shield
-                shield_timer = 0
-                shield_activate_sound.play()  # Special sound for shield
-                print("Shield activated at full strength!")
-            score += 2
+            # Shark eats food: remove food and gain energy
+            eaten = pygame.sprite.spritecollide(shark, foods, True)
+            if eaten:
+                energy = min(energy + 20 * len(eaten), 100)
+                score += len(eaten)
+                food_eat_sound.play()
+                print(f"Yum! Shark ate {len(eaten)} fish. Energy: {energy:.1f}")
 
-        # Shark collides with friendly submarine: lose energy
-        sub_hit = pygame.sprite.spritecollide(shark, subs, False, hits_shark_body)
-        if sub_hit:
-            energy -= 20
-            submarine_collision_sound.play()  # Add submarine collision sound
-            print("Ouch! Collided with friendly submarine.")
-            for s in sub_hit:
-                s.kill()
+            # Shark collects powerups
+            collected = pygame.sprite.spritecollide(shark, powerups, True)
+            for p in collected:
+                if isinstance(p, LaserPowerup):
+                    shark.laser_energy = min(shark.laser_energy + 30, 100)
+                    powerup_collect_sound.play()
+                    print("Laser energy powerup collected!")
+                elif isinstance(p, MissilePowerup):
+                    shark.missiles = min(shark.missiles + 2, 3)
+                    powerup_collect_sound.play()
+                    print("Missile powerup collected!")
+                elif isinstance(p, TorpedoPowerup):
+                    shark.torpedoes = min(shark.torpedoes + 1, 3)
+                    powerup_collect_sound.play()
+                    print("Torpedo powerup collected!")
+                elif isinstance(p, ShieldPowerup):
+                    shield_active = True
+                    shield_strength = 100  # Full strength shield
+                    shield_timer = 0
+                    shield_activate_sound.play()  # Special sound for shield
+                    print("Shield activated at full strength!")
+                score += 2
 
-        # Out of energy from a submarine hit or from swimming: checked after
-        # eating so a fish caught on the last drop still saves the shark
-        if energy <= 0 and not game_over:
-            fatal_collision_sound.play()
-            game_over = True
+            # Shark collides with friendly submarine: lose energy
+            sub_hit = pygame.sprite.spritecollide(shark, subs, False, hits_shark_body)
+            if sub_hit:
+                energy -= 20
+                submarine_collision_sound.play()  # Add submarine collision sound
+                print("Ouch! Collided with friendly submarine.")
+                for s in sub_hit:
+                    s.kill()
+
+            # Out of energy from a submarine hit or from swimming: checked after
+            # eating so a fish caught on the last drop still saves the shark
+            if energy <= 0 and not game_over:
+                fatal_collision_sound.play()
+                game_over = True
+                restart_lock = RESTART_LOCK_MS
+
+            if game_over:
+                break
 
         # Draw enhanced background using graphics enhancer
         graphics_enhancer.render_background()
