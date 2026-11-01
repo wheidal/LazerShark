@@ -13,19 +13,22 @@ ZONES = {
     'lagoon': {'width': (500, 600), 'length': (1500, 2500), 'bend': (400, 800),
                'next': ['pass'], 'decor': ['brain', 'staghorn', 'anemone'],
                'obstacles': ['coral', 'coral', 'coral', 'wreck', 'jellyfish'],
+               'enemies': ['tuna', 'tuna', 'manta', 'barracuda'],
                # Reef colours, from the water's edge out to the deepest, furthest part
                'reef': [(216, 196, 148), (178, 132, 106), (126, 104, 108), (72, 90, 114), (42, 68, 102)]},
     'pass': {'width': (380, 460), 'length': (900, 1600), 'bend': (240, 520),
              'next': ['lagoon', 'dropoff'], 'decor': ['table', 'fan', 'brain', 'staghorn'],
              'obstacles': ['coral', 'coral', 'mine', 'mine', 'jellyfish'],
+             'enemies': ['tuna', 'tuna', 'barracuda'],
              'reef': [(150, 158, 150), (120, 84, 112), (86, 74, 106), (54, 66, 98), (34, 50, 84)]},
     'dropoff': {'width': (560, 620), 'length': (1000, 1800), 'bend': (400, 800),
                 'next': ['pass'], 'decor': ['fan', 'table'], 'open_side': True,
                 'obstacles': ['wreck', 'wreck', 'mine', 'jellyfish', 'jellyfish'],
+                'enemies': ['tuna', 'manta', 'manta', 'evil_sub'],
                 'reef': [(92, 120, 138), (58, 76, 106), (40, 54, 88), (28, 40, 72), (18, 28, 56)]},
     # Only reached through enter_arena, for a boss fight
     'arena': {'width': (650, 650), 'length': (0, 0), 'bend': (500, 800),
-              'next': ['lagoon'], 'decor': ['brain', 'fan', 'table'], 'obstacles': [],
+              'next': ['lagoon'], 'decor': ['brain', 'fan', 'table'], 'obstacles': [], 'enemies': [],
               'reef': [(120, 130, 124), (92, 70, 92), (66, 58, 84), (42, 50, 78), (24, 34, 62)]},
 }
 ROUTE_ZONES = set(ZONES) - {'arena'}
@@ -229,6 +232,7 @@ class ChannelDirector:
         self.world_y = 0
         self.reef_colors = ZONES['lagoon']['reef']
         self.arena_chunks = 0
+        self.arena_reef = None
 
     @property
     def zone(self):
@@ -251,7 +255,7 @@ class ChannelDirector:
         self.score = score
         self.recent = (self.recent + samples[1:])[-SPAWN_SAMPLES_BELOW:]
         previous = self.reef_colors
-        target = ZONES[self.zone]['reef']
+        target = (self.zone == 'arena' and self.arena_reef) or ZONES[self.zone]['reef']
         self.reef_colors = [lerp_color(now, goal, REEF_COLOR_BLEND) for now, goal in zip(previous, target)]
         chunk = ChannelChunk(samples, self.rng, self.world_y, (previous, self.reef_colors))
         self.world_y += CHUNK_H
@@ -272,7 +276,9 @@ class ChannelDirector:
         self.distance -= CHUNK_H
         return self._next_chunk(score)
 
-    def enter_arena(self):
+    def enter_arena(self, reef=None):
+        self.arena_reef = reef
+        self.arena_chunks = 0  # A fight right after another still waits for its own arena
         self.generator.enter_arena()
 
     def leave_arena(self):
@@ -290,6 +296,9 @@ class ChannelDirector:
 
     def obstacle_kinds(self):
         return ZONES[self.zone]['obstacles']
+
+    def enemy_kinds(self):
+        return ZONES[self.zone]['enemies']
 
     def spawn_x(self, width, blocking=False, height=0):
         """Pick an x inside the channel at the top of the screen.

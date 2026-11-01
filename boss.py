@@ -1,6 +1,7 @@
 """
-The giant moray eel: lives in the arena's banks and lunges across the water.
-The shark can only fire upwards, so the way to beat it is to dodge below a lunge and shoot.
+Boss fights: what every boss shares, plus the first of them, the giant moray eel.
+The eel lives in the arena's banks and lunges across the water. The shark can only fire
+upwards, so the way to beat it is to dodge below a lunge and shoot.
 """
 import math
 import random
@@ -92,14 +93,13 @@ def _head_art(direction, mouth_open):
     return _art[key]
 
 
-class EelPart(pygame.sprite.Sprite):
-    def __init__(self, frames, is_head=False):
+class BossPart(pygame.sprite.Sprite):
+    def __init__(self, frames):
         super().__init__()
         self.frames = frames
         self.image = frames[0]
         self.mask = pygame.mask.from_surface(self.image)
         self.rect = self.image.get_rect()
-        self.is_head = is_head
 
     def show(self, frames, center, flash):
         if frames is not self.frames:  # The outline is the same whichever frame is showing
@@ -109,26 +109,31 @@ class EelPart(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(center=center)
 
 
-class MorayEel:
+class Hazard(pygame.sprite.Sprite):
+    """Something a boss leaves in the water. It only hurts while active."""
+    active = True
+    single_use = True  # Used up by hitting the shark
+
+
+class Boss:
+    name = "Boss"
+    arrival = "Something stirs..."
+    health_scale = 1
+    arena_reef = None  # Colours for this boss's arena, if it has its own
+
     def __init__(self, left_edge, right_edge, difficulty=DEFAULT_DIFFICULTY):
         ranges = DIFFICULTIES.get(difficulty, DIFFICULTIES[DEFAULT_DIFFICULTY])
-        health = random.randint(*ranges['health'])
         self.bite_damage = random.randint(*ranges['bite'])
         self.warn_steps = random.randint(*ranges['warn_steps'])
         self.left_edge = left_edge
         self.right_edge = right_edge
-        self.health = self.max_health = health
+        self.health = self.max_health = int(random.randint(*ranges['health']) * self.health_scale)
         self.parts = pygame.sprite.Group()
-        self.head = EelPart(_head_art(1, False), is_head=True)
-        self.body = [EelPart(_segment_art(max(11, 24 - i // 2))) for i in range(SEGMENTS)]
-        self.state = 'hidden'
-        self.timer = random.randint(*HIDE_STEPS)
-        self.side = random.choice([-1, 1])
-        self.y = 300
-        self.head_x = 0
+        self.hazards = pygame.sprite.Group()
         self.age = 0
         self.flash = 0
-        self.rubble_due = 0  # Each full lunge shakes loose hazards, so the bottom of the screen isn't safe
+        self.rubble_due = 0
+        self.shot_power = 1  # Set before each on_shot
 
     @property
     def dead(self):
@@ -139,6 +144,66 @@ class MorayEel:
         return self.health < self.max_health * ANGRY_AT
 
     @property
+    def warning(self):
+        """Steps of warning before the next attack."""
+        return int(self.warn_steps * ANGRY_WARN_SHARE) if self.angry else self.warn_steps
+
+    def take_damage(self, amount):
+        self.health = max(0, self.health - amount)
+        self.flash = FLASH_STEPS
+
+    def hurt(self, amount):
+        """Damage from a shot, scaled by how strong that shot was."""
+        self.take_damage(amount * self.shot_power)
+
+    def update(self, shark_rect):
+        self.age += 1
+        self.flash = max(0, self.flash - 1)
+        self.hazards.update()
+        self.step(shark_rect)
+
+    def step(self, shark_rect):
+        raise NotImplementedError
+
+    def on_shot(self, parts, heavy):
+        """A shot landed on these parts. heavy means a missile or torpedo, not a laser."""
+        raise NotImplementedError
+
+    def targets(self):
+        """What a torpedo can home in on."""
+        return []
+
+    def touching(self, shark, collided):
+        """Whether anything of this boss's is hurting the shark right now."""
+        if pygame.sprite.spritecollideany(shark, self.parts, collided):
+            return True
+        for hazard in self.hazards:
+            if hazard.active and collided(shark, hazard):
+                if hazard.single_use:
+                    hazard.kill()
+                return True
+        return False
+
+    def draw(self, screen):
+        self.hazards.draw(screen)
+        self.parts.draw(screen)
+
+
+class MorayEel(Boss):
+    name = "GIANT MORAY"
+    arrival = "Something stirs in the reef..."
+
+    def __init__(self, left_edge, right_edge, difficulty=DEFAULT_DIFFICULTY):
+        super().__init__(left_edge, right_edge, difficulty)
+        self.head = BossPart(_head_art(1, False))
+        self.body = [BossPart(_segment_art(max(11, 24 - i // 2))) for i in range(SEGMENTS)]
+        self.state = 'hidden'
+        self.timer = random.randint(*HIDE_STEPS)
+        self.side = random.choice([-1, 1])
+        self.y = 300
+        self.head_x = 0
+
+    @property
     def _hole_x(self):
         return self.left_edge if self.side < 0 else self.right_edge
 
@@ -147,13 +212,11 @@ class MorayEel:
         reach = (self.right_edge - self.left_edge) * REACH
         return self._hole_x + reach if self.side < 0 else self._hole_x - reach
 
-    def update(self, shark_rect):
-        self.age += 1
-        self.flash = max(0, self.flash - 1)
+    def step(self, shark_rect):
         self.timer -= 1
         if self.state == 'hidden' and self.timer <= 0:
             self.state = 'warning'
-            self.timer = int(self.warn_steps * ANGRY_WARN_SHARE) if self.angry else self.warn_steps
+            self.timer = self.warning
             self.side = random.choice([-1, 1])
             self.y = max(LUNGE_Y_RANGE[0], min(LUNGE_Y_RANGE[1], shark_rect.centery))
             self.head_x = self._hole_x
@@ -164,6 +227,7 @@ class MorayEel:
             if (self.head_x - self._target_x) * -self.side >= 0:
                 self.head_x = self._target_x
                 self.state = 'exposed'
+                # Each full lunge shakes loose hazards, so the bottom of the screen isn't safe
                 self.rubble_due = 2 if self.angry else 1
                 self.timer = ANGRY_EXPOSED_STEPS if self.angry else EXPOSED_STEPS
         elif self.state == 'exposed' and self.timer <= 0:
@@ -192,12 +256,13 @@ class MorayEel:
             part.show(part.frames, (x, self.y + ripple), flash)
             self.parts.add(part)
 
-    def take_damage(self, amount):
-        self.health = max(0, self.health - amount)
-        self.flash = FLASH_STEPS
+    def on_shot(self, parts, heavy):
+        if heavy:
+            self.hurt(HEAVY_DAMAGE)
+        else:
+            self.hurt(HEAD_LASER_DAMAGE if self.head in parts else LASER_DAMAGE)
 
     def targets(self):
-        """What a torpedo can home in on."""
         return [self.head] if self.head.alive() else []
 
     def draw(self, screen):
@@ -211,5 +276,8 @@ class MorayEel:
                     pygame.draw.line(screen, (255, 60, 50), (x, self.y), (x + 18, self.y), 3)
             for offset in (-11, 11):
                 pygame.draw.circle(screen, (250, 230, 70), (self._hole_x, self.y + offset), 4)
-        for part in sorted(self.parts, key=lambda p: p.is_head):
-            screen.blit(part.image, part.rect)
+        for part in self.body:
+            if part.alive():
+                screen.blit(part.image, part.rect)
+        if self.head.alive():
+            screen.blit(self.head.image, self.head.rect)

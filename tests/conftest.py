@@ -62,7 +62,7 @@ def play(monkeypatch, tmp_path):
                 press(pygame.K_a)
             elif 'running' in state:
                 if quiet:
-                    for timer in ('spawn_timer', 'powerup_timer', 'sub_timer'):
+                    for timer in ('spawn_timer', 'powerup_timer', 'enemy_timer'):
                         state[timer] = 0
                 frame[0] += 1
                 if script(state, frame[0]) or frame[0] >= max_frames:

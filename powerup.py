@@ -1,6 +1,6 @@
 """
 Powerup logic and effects.
-Laser energy, missile, torpedo powerups, and friendly submarine supply drop.
+Laser energy, missile, torpedo and shield powerups.
 """
 import pygame
 import random
@@ -103,73 +103,3 @@ class TorpedoPowerup(pygame.sprite.Sprite):
 		pygame.draw.circle(self.image, (155, 215, 255, 90), (5, 4), 1)
 		pygame.draw.circle(self.image, (155, 215, 255, 70), (3, 9), 1)
 		self.rect = self.image.get_rect(center=(x, y))
-
-
-class FriendlySubmarine(pygame.sprite.Sprite):
-	def __init__(self, x, y):
-		super().__init__()
-		self.image = pygame.Surface((80, 36), pygame.SRCALPHA)
-
-		# Hull shadow
-		pygame.draw.ellipse(self.image, (45, 55, 115), (2, 7, 76, 22))
-		# Main hull
-		pygame.draw.ellipse(self.image, (75, 95, 175), (0, 5, 80, 22))
-		# Hull top highlight
-		pygame.draw.ellipse(self.image, (120, 150, 220), (3, 5, 74, 12))
-		# Keel stripe
-		pygame.draw.ellipse(self.image, (55, 70, 145), (8, 24, 64, 5))
-
-		# Conning tower (sail)
-		pygame.draw.rect(self.image, (60, 80, 160), (31, 0, 18, 8))
-		pygame.draw.rect(self.image, (95, 118, 195), (32, 1, 16, 6))
-		pygame.draw.rect(self.image, (120, 145, 215), (33, 1, 10, 3))  # top highlight
-		# Periscope
-		pygame.draw.rect(self.image, (80, 100, 170), (39, -3, 3, 4))
-		pygame.draw.circle(self.image, (130, 160, 210), (40, -3), 2)
-
-		# Portholes (3 evenly spaced)
-		for px in [20, 38, 56]:
-			pygame.draw.circle(self.image, (140, 195, 255), (px, 14), 4)
-			pygame.draw.circle(self.image, (210, 238, 255), (px - 1, 13), 2)
-			pygame.draw.circle(self.image, (60, 85, 160), (px, 14), 4, 1)
-
-		# Bow hydroplanes (front)
-		pygame.draw.polygon(self.image, (55, 72, 150), [(11, 12), (0, 8), (0, 11), (9, 15)])
-		pygame.draw.polygon(self.image, (55, 72, 150), [(11, 16), (0, 18), (0, 21), (9, 17)])
-
-		# Stern planes (back)
-		pygame.draw.polygon(self.image, (55, 72, 150), [(69, 12), (80, 8), (80, 11), (71, 15)])
-		pygame.draw.polygon(self.image, (55, 72, 150), [(69, 16), (80, 18), (80, 21), (71, 17)])
-
-		# Propeller hub
-		pygame.draw.circle(self.image, (165, 175, 195), (76, 16), 4)
-		# Propeller blades
-		pygame.draw.ellipse(self.image, (148, 158, 182), (74, 11, 4, 5))
-		pygame.draw.ellipse(self.image, (148, 158, 182), (71, 14, 5, 4))
-
-		# Hull rivets
-		for rx in [18, 28, 40, 52, 62]:
-			pygame.draw.circle(self.image, (55, 72, 150), (rx, 26), 1)
-
-		# Navigation lights
-		pygame.draw.circle(self.image, (255, 80, 80), (5, 16), 2)    # red port
-		pygame.draw.circle(self.image, (80, 255, 80), (75, 16), 2)   # green starboard
-
-		self.rect = self.image.get_rect(center=(x, y))
-		self.drop_timer = 0
-		self.pending_drops = []
-
-	def update(self, *args, **kwargs):
-		self.rect.y += 3  # Same speed as the coastline, so it never drifts into a bank
-		self.drop_timer += 1
-		# Drop supply every 120 frames (~2 seconds at 60fps)
-		if self.drop_timer == 120:
-			self.drop_timer = 0
-			r = random.randint(0, 2)
-			if r == 0:
-				supply = LaserPowerup(self.rect.centerx, self.rect.bottom)
-			elif r == 1:
-				supply = MissilePowerup(self.rect.centerx, self.rect.bottom)
-			else:
-				supply = TorpedoPowerup(self.rect.centerx, self.rect.bottom)
-			self.pending_drops.append(supply)

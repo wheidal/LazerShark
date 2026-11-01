@@ -107,7 +107,7 @@ def test_full_fight_reaches_the_arena_and_ends_in_victory(play):
     def step(state, frame, seen):
         state['energy'] = 100
         shark = state['shark']
-        eel = state['eel']
+        eel = state['boss']
         if eel:
             seen['saw_eel'] = True
             for part in eel.parts:
@@ -127,14 +127,14 @@ def test_full_fight_reaches_the_arena_and_ends_in_victory(play):
 def test_coast_holds_still_during_the_fight_and_scrolls_after(play):
     def step(state, frame, seen):
         state['energy'] = 100
-        if state['eel']:
-            state['eel'].state = 'hidden'
-            state['eel'].timer = 999
+        if state['boss']:
+            state['boss'].state = 'hidden'
+            state['boss'].timer = 999
             seen.setdefault('fight_frame', frame)
             seen.setdefault('y', sorted(b.rect.y for b in state['banks']))
             if frame - seen['fight_frame'] == 60:
                 seen['same'] = seen['y'] == sorted(b.rect.y for b in state['banks'])
-                state['eel'].take_damage(9999)
+                state['boss'].take_damage(9999)
         return 'same' in seen and state['boss_phase'] == 'beaten' and frame - seen['fight_frame'] > 90
 
     seen = fight(play, step)
@@ -143,7 +143,7 @@ def test_coast_holds_still_during_the_fight_and_scrolls_after(play):
 
 def test_contact_costs_energy_once_per_second(play):
     def step(state, frame, seen):
-        eel = state['eel']
+        eel = state['boss']
         if not eel:
             state['energy'] = 100
             return False
@@ -164,7 +164,7 @@ def test_contact_costs_energy_once_per_second(play):
 
 def test_restart_clears_the_boss(play):
     def step(state, frame, seen):
-        if state['eel'] and 'died' not in seen:
+        if state['boss'] and 'died' not in seen:
             seen['died'] = frame
             state['energy'] = -1
         elif 'died' not in seen:
@@ -172,7 +172,7 @@ def test_restart_clears_the_boss(play):
         elif frame == seen['died'] + 90:
             press(pygame.K_a)
         elif frame > seen['died'] + 90 and not state['game_over']:
-            seen['after'] = (state['eel'], state['boss_phase'], state['score'])
+            seen['after'] = (state['boss'], state['boss_phase'], state['score'])
             return True
         return False
 
@@ -194,7 +194,7 @@ def test_full_lunges_shake_loose_more_when_angry(display):
 def test_rubble_falls_during_the_fight(play):
     def step(state, frame, seen):
         state['energy'] = 100
-        if state['eel']:
+        if state['boss']:
             seen['start'] = seen.get('start', frame)
             seen['most'] = max(seen.get('most', 0), len(state['obstacles']))
             return frame - seen['start'] > 600
@@ -208,8 +208,8 @@ def test_game_carries_on_after_a_win_with_everything_spawning(play, monkeypatch)
         if frame == 1:
             state['score'] = boss.BOSS_SCORE
         state['energy'] = 100
-        if state['eel']:
-            state['eel'].take_damage(9999)
+        if state['boss']:
+            state['boss'].take_damage(9999)
         if state['boss_phase'] == 'beaten':
             seen['after'] = seen.get('after', 0) + 1
             seen['zones'].add(state['channel'].zone)
@@ -272,8 +272,8 @@ def test_menu_choice_is_saved_and_used_by_the_fight(play, tmp_path):
             state['score'] = boss.BOSS_SCORE
         state['energy'] = 100
         seen['difficulty'] = state['difficulty']
-        if state['eel']:
-            seen['health'] = state['eel'].max_health
+        if state['boss']:
+            seen['health'] = state['boss'].max_health
             return True
 
     play(script, menu_keys=keys, max_frames=6000)

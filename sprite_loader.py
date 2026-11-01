@@ -292,11 +292,11 @@ class EnhancedShark(AnimatedSprite):
         if self.fire_cooldown > 0:
             self.fire_cooldown -= dt * 0.001
     
-    def fire_laser(self) -> bool:
+    def fire_laser(self, cost=LASER_SHOT_COST, cooldown=0.1) -> bool:
         """Fire laser if energy available"""
-        if self.laser_energy >= LASER_SHOT_COST and self.fire_cooldown <= 0:
-            self.laser_energy -= LASER_SHOT_COST
-            self.fire_cooldown = 0.1  # 100ms cooldown
+        if self.laser_energy >= cost and self.fire_cooldown <= 0:
+            self.laser_energy -= cost
+            self.fire_cooldown = cooldown
             return True
         return False
     

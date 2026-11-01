@@ -170,10 +170,10 @@ class Shark(pygame.sprite.Sprite):
 		# Fallback update method for sprite group compatibility
 		pass
 
-	def fire_laser(self):
-		if self.laser_energy >= LASER_SHOT_COST and self.fire_cooldown <= 0:
-			self.laser_energy -= LASER_SHOT_COST
-			self.fire_cooldown = 300  # ms cooldown
+	def fire_laser(self, cost=LASER_SHOT_COST, cooldown=0.3):
+		if self.laser_energy >= cost and self.fire_cooldown <= 0:
+			self.laser_energy -= cost
+			self.fire_cooldown = cooldown * 1000  # ms
 			print("Laser fired!")
 			return True
 		return False

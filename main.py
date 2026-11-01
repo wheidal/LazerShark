@@ -13,7 +13,7 @@ from player_enhanced import SharkWithSprites
 from obstacle import OBSTACLE_TYPES
 from food import SmallFish
 from projectile import Laser, Missile, Torpedo
-from powerup import LaserPowerup, MissilePowerup, TorpedoPowerup, FriendlySubmarine, ShieldPowerup
+from powerup import LaserPowerup, MissilePowerup, TorpedoPowerup, ShieldPowerup
 from particle import ParticleEmitter
 from graphics_enhancements import (
     GraphicsEnhancer, ParticleEffects, AnimatedSprite, 
@@ -23,9 +23,12 @@ from settings_manager import SettingsManager
 from resources import resource_path
 from channel import ChannelDirector, BANK_DAMAGE, BANK_INVULN_MS, BANK_PUSH
 from hud import Hud
+from shark_look import SharkLook
 from attract import AttractMode, Briefing
-from boss import (MorayEel, BOSS_SCORE, CONTACT_INVULN_MS, DEFAULT_DIFFICULTY, DIFFICULTIES, HEAD_LASER_DAMAGE,
-                  HEAVY_DAMAGE, LASER_DAMAGE, LASER_RECHARGE, VICTORY_SCORE)
+from boss import CONTACT_INVULN_MS, DEFAULT_DIFFICULTY, DIFFICULTIES, LASER_RECHARGE, VICTORY_SCORE
+from bosses import BOSS_ROSTER
+from enemies import ENEMY_LIMIT, ENEMY_SPAWN_MS, Enemy, choose_enemy
+from weapons import WEAPONS, WeaponPowerup, WeaponState
 
 # The simulation always advances in 60 Hz steps, so game speed doesn't depend on frame rate
 STEP_MS = 1000 / 60
@@ -312,6 +315,7 @@ def main():
     
     # Title screen: the game plays itself until someone presses a key
     attract = AttractMode(screen, graphics_enhancer)
+    start_boss = None  # Number keys jump straight to a boss
     splash = True
     while splash:
         dt = clock.tick(60)
@@ -330,6 +334,9 @@ def main():
                     sys.exit()
                 elif event.key == pygame.K_s:
                     run_settings()
+                elif pygame.K_1 <= event.key < pygame.K_1 + len(BOSS_ROSTER):
+                    start_boss = event.key - pygame.K_1
+                    splash = False
                 else:
                     splash = False
             if event.type == pygame.JOYBUTTONDOWN:
@@ -351,7 +358,7 @@ def main():
             if event.type == pygame.KEYDOWN and event.key == pygame.K_F11:
                 pygame.display.toggle_fullscreen()
             elif event.type in (pygame.KEYDOWN, pygame.JOYBUTTONDOWN):
-                briefing.elapsed = 10 ** 9
+                briefing.next_page()
 
     # Clear event queue and add a short delay to ensure splash screen is removed
     pygame.event.clear()
@@ -366,18 +373,20 @@ def main():
     except Exception as e:
         print(f"Could not load enhanced sprites, using procedural shark: {e}")
         shark = Shark(400, 580)  # Fallback to procedural shark
-    all_sprites = pygame.sprite.Group(shark)
+    all_sprites = pygame.sprite.Group()  # The shark is drawn by SharkLook
+    shark_look = SharkLook()
     obstacles = pygame.sprite.Group()
     foods = pygame.sprite.Group()
     projectiles = pygame.sprite.Group()
     powerups = pygame.sprite.Group()
-    subs = pygame.sprite.Group()
+    enemy_shots = pygame.sprite.Group()
     banks = pygame.sprite.Group()
     channel = start_channel(banks, all_sprites)
     bank_invuln = 0
     boss_phase = None  # Then 'approach' while the arena scrolls in, 'fight', and 'beaten'
-    eel = None
-    eel_invuln = 0
+    boss = None
+    boss_invuln = 0
+    next_boss = 0
     banner = None
     banner_timer = 0
     particles = pygame.sprite.Group()
@@ -387,15 +396,14 @@ def main():
     # Weapon upgrade system
     obstacles_spawned = 0
     obstacles_destroyed = 0
-    upgrade_active = False
-    upgrade_timer = 0
+    weapon = WeaponState()
     running = True
     game_over = False
     paused = False
     energy = 100
     spawn_timer = 0
     powerup_timer = 0
-    sub_timer = 0
+    enemy_timer = 0
     score = 0
     restart_lock = 0
     step_backlog = 0
@@ -406,6 +414,10 @@ def main():
     shield_timer = 0
     next_shield_spawn = random.randint(180000, 300000)  # 3-5 min in ms
     
+    if start_boss is not None:
+        next_boss = start_boss
+        score = BOSS_ROSTER[start_boss][1]
+
     while running:
         frame_ms = clock.tick(60)
         restart_requested = False
@@ -439,18 +451,20 @@ def main():
                     shark = SharkWithSprites(400, 580)
                 except Exception:
                     shark = Shark(400, 580)
-                all_sprites = pygame.sprite.Group(shark)
+                all_sprites = pygame.sprite.Group()
+                shark_look.reset()
                 obstacles.empty()
                 foods.empty()
                 projectiles.empty()
                 powerups.empty()
-                subs.empty()
+                enemy_shots.empty()
                 banks.empty()
                 channel = start_channel(banks, all_sprites)
                 bank_invuln = 0
                 boss_phase = None
-                eel = None
-                eel_invuln = 0
+                boss = None
+                boss_invuln = 0
+                next_boss = 0
                 banner = None
                 banner_timer = 0
                 particles.empty()
@@ -458,11 +472,10 @@ def main():
                 energy = 100
                 spawn_timer = 0
                 powerup_timer = 0
-                sub_timer = 0
+                enemy_timer = 0
                 shield_active = False
                 shield_strength = 0
-                upgrade_active = False
-                upgrade_timer = 0
+                weapon = WeaponState()
                 obstacles_destroyed = 0
                 destroyed_counts = {}
                 score = 0
@@ -511,11 +524,6 @@ def main():
         for _ in range(steps):
             dt = STEP_MS
             enhanced_particles.update()
-
-            if upgrade_active:
-                upgrade_timer -= dt
-                if upgrade_timer <= 0:
-                    upgrade_active = False
 
             keys = pygame.key.get_pressed()
         
@@ -570,12 +578,19 @@ def main():
             foods.update()
             projectiles.update()
             powerups.update()
-            subs.update()
-            for sub in subs:
-                for supply in sub.pending_drops:
-                    powerups.add(supply)
-                    all_sprites.add(supply)
-                sub.pending_drops.clear()
+            enemy_shots.update()
+            for sprite in obstacles.sprites():
+                if isinstance(sprite, Enemy):
+                    enemy_shots.add(sprite.new_shots)
+                    all_sprites.add(sprite.new_shots)
+                    # Anything released inside the reef would just sit there out of reach
+                    released = [thing for thing in sprite.new_obstacles
+                                if not pygame.sprite.spritecollideany(thing, banks, pixels_touch)]
+                    obstacles.add(released)
+                    all_sprites.add(released)
+                    sprite.steer_clear_of(banks)
+                    sprite.new_shots = []
+                    sprite.new_obstacles = []
             particles.update()
 
             shark.laser_energy = min(100, shark.laser_energy + LASER_RECHARGE[difficulty] * STEP_MS / 1000)
@@ -585,22 +600,14 @@ def main():
                 # Easy mode: unlimited laser energy
                 if easy_mode:
                     shark.laser_energy = 100
-                if shark.fire_laser():
-                    if upgrade_active:
-                        for offset in [-12, 0, 12]:
-                            laser = Laser(shark.rect.centerx + offset, shark.rect.top)
-                            projectiles.add(laser)
-                            all_sprites.add(laser)
-                        laser_triple_sound.play()  # Different sound for triple laser
+                if shark.fire_laser(weapon.cost, weapon.cooldown):
+                    shots = weapon.fire(shark.rect.centerx, shark.rect.top)
+                    projectiles.add(shots)
+                    all_sprites.add(shots)
+                    if len(shots) > 1:
+                        laser_triple_sound.play()  # Different sound for spreads
                     else:
-                        laser = Laser(shark.rect.centerx, shark.rect.top)
-                        projectiles.add(laser)
-                        all_sprites.add(laser)
                         laser_sound.play()
-                        # Add laser trail effect
-                        ParticleEffects.create_trail(enhanced_particles, 
-                                                    (shark.rect.centerx, shark.rect.top),
-                                                    (0, -1), (255, 100, 100))
             if keys[keymap['missile']] or controller_missile:
                 if shark.fire_missile():
                     missile = Missile(shark.rect.centerx, shark.rect.top)
@@ -612,7 +619,7 @@ def main():
                     # Find nearest obstacle
                     nearest = None
                     min_dist = float('inf')
-                    for obs in list(obstacles) + (eel.targets() if eel else []):
+                    for obs in list(obstacles) + (boss.targets() if boss else []):
                         dist = abs(obs.rect.centerx - shark.rect.centerx) + abs(obs.rect.centery - shark.rect.centery)
                         if dist < min_dist:
                             min_dist = dist
@@ -638,20 +645,26 @@ def main():
                 all_sprites.add(new_banks)
 
             # Reaching the boss score opens up the arena ahead
-            if boss_phase is None and score >= BOSS_SCORE:
+            if boss_phase != 'approach' and boss_phase != 'fight' and next_boss < len(BOSS_ROSTER):
+                boss_class, boss_score = BOSS_ROSTER[next_boss]
+                if score < boss_score:
+                    boss_class = None
+            else:
+                boss_class = None
+            if boss_class:
                 boss_phase = 'approach'
-                channel.enter_arena()
-                banner = "Something stirs in the reef..."
+                channel.enter_arena(boss_class.arena_reef)
+                banner = boss_class.arrival
                 banner_timer = 4000
-            if boss_phase == 'approach' and channel.arena_ready and not obstacles and not subs:
+            if boss_phase == 'approach' and channel.arena_ready and not obstacles and not enemy_shots:
                 boss_phase = 'fight'
-                eel = MorayEel(*channel.arena_edges, difficulty)
-                print(f"Giant moray ({difficulty}): health {eel.health}, bite {eel.bite_damage}, warning {eel.warn_steps} steps")
+                boss = BOSS_ROSTER[next_boss][0](*channel.arena_edges, difficulty)
+                print(f"{boss.name} ({difficulty}): health {boss.health}, bite {boss.bite_damage}, warning {boss.warn_steps} steps")
                 # Everyone starts the fight able to win it, however the journey went
                 shark.laser_energy = 100
                 shark.missiles = max(shark.missiles, 2)
                 shark.torpedoes = max(shark.torpedoes, 1)
-                banner = "GIANT MORAY!"
+                banner = f"{boss.name}!"
                 banner_timer = 2000
             banner_timer -= dt
 
@@ -678,8 +691,10 @@ def main():
                 powerup_timer = 0
                 px = channel.spawn_x(30)
                 # Mostly lasers during a fight, so nobody is left unable to hurt the boss
-                ptype = random.choice(['laser', 'laser', 'missile', 'torpedo'] if eel else ['laser', 'missile', 'torpedo'])
-                if ptype == 'laser':
+                ptype = random.choice(['laser', 'laser', 'missile', 'torpedo'] if boss else ['laser', 'missile', 'torpedo', 'weapon'])
+                if ptype == 'weapon':
+                    p = WeaponPowerup(px, -16, random.choice(list(WEAPONS)))
+                elif ptype == 'laser':
                     p = LaserPowerup(px, -16)
                 elif ptype == 'missile':
                     p = MissilePowerup(px, -16)
@@ -688,17 +703,20 @@ def main():
                 powerups.add(p)
                 all_sprites.add(p)
 
-            # Spawn friendly submarine every 12 seconds, where there's room to pass it
-            sub_timer += dt
-            if sub_timer > 12000 and boss_phase not in ('approach', 'fight'):
-                sub_timer = 0
-                sx = channel.spawn_x(80, blocking=True)
-                if sx is not None:
-                    sub = FriendlySubmarine(sx, -18)
-                    subs.add(sub)
-                    all_sprites.add(sub)
+            # Spawn enemies, up to the limit for this difficulty
+            enemy_timer += dt
+            if enemy_timer > ENEMY_SPAWN_MS[difficulty] and boss_phase not in ('approach', 'fight'):
+                enemy_timer = 0
+                on_screen = sum(isinstance(sprite, Enemy) for sprite in obstacles)
+                kind = choose_enemy(channel.enemy_kinds(), score)
+                if kind and on_screen < ENEMY_LIMIT[difficulty]:
+                    spawn_x = channel.spawn_x(kind.WIDTH, blocking=True, height=kind.HEIGHT)
+                    if spawn_x is not None:
+                        new_enemies = kind.create(spawn_x, shark.rect)
+                        obstacles.add(new_enemies)
+                        all_sprites.add(new_enemies)
 
-            # Scroll obstacles, food, powerups, and subs downward
+            # Scroll obstacles, food and powerups downward
             for sprite in obstacles:
                 sprite.rect.y += 3
                 if sprite.rect.top > 600:
@@ -717,9 +735,9 @@ def main():
                 sprite.rect.y += 3
                 if sprite.rect.top > 600:
                     sprite.kill()
-            for sprite in subs:
-                if sprite.rect.top > 600:
-                    sprite.kill()
+
+            energy_before_hits = energy
+            shield_before_hits = shield_strength if shield_active else 0
 
             # Collision detection
             # Shark hits obstacle: how much it costs depends on the obstacle
@@ -760,6 +778,8 @@ def main():
                         if 'Coral' in obstacle_name:
                             coral_collision_sound.play()
                             print(f"Playing coral collision sound for {obstacle_name}!")
+                        elif 'Sub' in obstacle_name:
+                            submarine_collision_sound.play()
                         elif 'Shipwreck' in obstacle_name:
                             shipwreck_collision_sound.play()
                             print(f"Playing shipwreck collision sound for {obstacle_name}!")
@@ -792,6 +812,7 @@ def main():
                             particle_timer += dt
                             screen.fill((0, 0, 64))
                             all_sprites.draw(screen)
+                            shark_look.draw_shark(screen, shark, weapon.kind, dt)
                             particles.update()
                             particles.draw(screen)
                             pygame.display.flip()
@@ -836,9 +857,11 @@ def main():
             for shot in pygame.sprite.groupcollide(projectiles, obstacles, False, False, pixels_touch).keys():
                 targets = pygame.sprite.spritecollide(shot, obstacles, False, pixels_touch)
                 if isinstance(shot, Laser):
-                    color = (255,200,0)
+                    if shot.pierce:
+                        targets = [obs for obs in targets if obs not in shot.already_hit]
+                        shot.already_hit.update(targets)
                     for obs in targets:
-                        obs.hits += 1
+                        obs.hits += shot.power
                         emitter.emit(shot.rect.midtop, color=obs.debris_color, count=4, size=4, speed=3, lifetime=10)
                         if obs.hits >= obs.toughness and obs not in destroyed:
                             destroyed.append(obs)
@@ -848,7 +871,30 @@ def main():
                         emitter.emit(obs.rect.center, color=color, count=24, size=10, speed=5, lifetime=28)
                         if obs not in destroyed:
                             destroyed.append(obs)
-                shot.kill()
+                if not (isinstance(shot, Laser) and shot.pierce):
+                    shot.kill()
+
+            # Beams hit once, through a shield first
+            for beam in pygame.sprite.spritecollide(shark, enemy_shots, False, pixels_touch):
+                if beam.active:
+                    beam.active = False
+                    if shield_active and shield_strength > 0:
+                        shield_activate_sound.play()
+                        shield_strength -= beam.damage
+                        if shield_strength <= 0:
+                            shield_active = False
+                            shield_strength = 0
+                    else:
+                        energy -= beam.damage
+                        generic_collision_sound.play()
+                        graphics_enhancer.trigger_damage_effect()
+
+            # A charging tuna blows up on the coast too
+            for sprite in obstacles.sprites():
+                if sprite.bursts_on_coast and sprite.state == 'charge' and \
+                        pygame.sprite.spritecollideany(sprite, banks, pixels_touch):
+                    sprite.kill()
+                    blown_up.append(sprite)
 
             # A mine's blast clears the obstacles around it, which can set off other mines.
             # One the shark touched has already cost it energy, so its blast spares the shark.
@@ -879,6 +925,13 @@ def main():
                 print(f"{obs.name} destroyed!")
                 obstacle_destroy_sound.play()
                 score += obs.reward
+                if obs.drops_pickup:
+                    px = max(40, min(760, obs.rect.centerx))
+                    p = random.choice([LaserPowerup(px, obs.rect.centery), MissilePowerup(px, obs.rect.centery),
+                                       TorpedoPowerup(px, obs.rect.centery),
+                                       WeaponPowerup(px, obs.rect.centery, random.choice(list(WEAPONS)))])
+                    powerups.add(p)
+                    all_sprites.add(p)
                 if obs.counts_for_rewards:
                     destroyed_counts[obs.name] = destroyed_counts.get(obs.name, 0) + 1
                     if destroyed_counts[obs.name] >= 4 and not shield_active:
@@ -888,50 +941,54 @@ def main():
                         all_sprites.add(shield_powerup)
                         destroyed_counts[obs.name] = 0
                     obstacles_destroyed += 1
-                    if obstacles_destroyed >= 5 and not upgrade_active:
-                        upgrade_active = True
-                        upgrade_timer = 10000
+                    if obstacles_destroyed >= 5:
+                        weapon.earn()
                         obstacles_destroyed = 0
                         upgrade_activate_sound.play()
 
-            # The eel: bites on contact, and any shot that lands hurts it
-            if eel:
-                eel.update(shark.rect)
-                while eel.rubble_due:
-                    eel.rubble_due -= 1
+            # The boss: bites on contact, and any shot that lands hurts it
+            if boss:
+                boss.update(shark.rect)
+                while boss.rubble_due:
+                    boss.rubble_due -= 1
                     kind = OBSTACLE_TYPES[random.choice(['coral', 'coral', 'mine'])]
                     spawn_x = channel.spawn_x(kind.WIDTH, blocking=True, height=kind.HEIGHT)
                     if spawn_x is not None:
                         rubble = kind.create(spawn_x)
                         obstacles.add(rubble)
                         all_sprites.add(rubble)
-                eel_invuln = max(0, eel_invuln - dt)
-                if eel_invuln <= 0 and pygame.sprite.spritecollideany(shark, eel.parts, pixels_touch):
-                    eel_invuln = CONTACT_INVULN_MS
+                boss_invuln = max(0, boss_invuln - dt)
+                if boss_invuln <= 0 and boss.touching(shark, pixels_touch):
+                    boss_invuln = CONTACT_INVULN_MS
                     if shield_active and shield_strength > 0:
                         shield_activate_sound.play()
-                        shield_strength -= eel.bite_damage
+                        shield_strength -= boss.bite_damage
                         if shield_strength <= 0:
                             shield_active = False
                             shield_strength = 0
                     else:
-                        energy -= eel.bite_damage
+                        energy -= boss.bite_damage
                         generic_collision_sound.play()
                         graphics_enhancer.trigger_damage_effect()
                     emitter.emit(shark.rect.center, color=(255,80,60), count=16, size=10, speed=6, lifetime=22)
-                for shot, parts in pygame.sprite.groupcollide(projectiles, eel.parts, True, False, pixels_touch).items():
-                    if isinstance(shot, Laser):
-                        eel.take_damage(HEAD_LASER_DAMAGE if any(p.is_head for p in parts) else LASER_DAMAGE)
+                for shot, parts in pygame.sprite.groupcollide(projectiles, boss.parts, False, False, pixels_touch).items():
+                    is_laser = isinstance(shot, Laser)
+                    if is_laser and boss in shot.already_hit:
+                        continue  # A piercing shot hurts the boss once, however much of it passes through
+                    boss.shot_power = shot.power if is_laser else 1
+                    boss.on_shot(parts, not is_laser)
+                    if is_laser and shot.pierce:
+                        shot.already_hit.add(boss)
                     else:
-                        eel.take_damage(HEAVY_DAMAGE)
+                        shot.kill()
                     emitter.emit(shot.rect.midtop, color=(255,220,120), count=6, size=5, speed=3, lifetime=12)
-                if eel.dead:
-                    for part in eel.parts:
+                if boss.dead:
+                    for part in boss.parts:
                         ParticleEffects.create_explosion(enhanced_particles, part.rect.center,
                                                         [(255, 120, 30), (255, 210, 80), (180, 220, 100)], 12)
                     obstacle_destroy_sound.play()
                     upgrade_activate_sound.play()
-                    print("Giant moray defeated!")
+                    print(f"{boss.name} defeated!")
                     score += VICTORY_SCORE
                     energy = 100
                     shark.laser_energy = 100
@@ -939,9 +996,22 @@ def main():
                     shark.torpedoes = 3
                     channel.leave_arena()
                     boss_phase = 'beaten'
-                    eel = None
-                    banner = "MORAY DEFEATED!  Fully repaired"
+                    next_boss += 1
+                    banner = f"{boss.name} DEFEATED!  Fully repaired"
+                    boss = None
                     banner_timer = 3500
+
+            # A real hit, not the slow drain from swimming, costs a weapon level
+            if energy_before_hits - energy > 1:
+                weapon.lose_level()
+                shark_look.hit()
+            shield_now = shield_strength if shield_active else 0
+            if shield_now < shield_before_hits:
+                if shield_now > 0:
+                    blow = hit[0].rect.center if hit else touching[0].rect.center if touching else None
+                    shark_look.shield_hit(shark.rect.center, blow)
+                else:
+                    shark_look.shield_break(shark.rect.center)
 
             # Shark eats food: remove food and gain energy
             eaten = pygame.sprite.spritecollide(shark, foods, True)
@@ -972,18 +1042,14 @@ def main():
                     shield_timer = 0
                     shield_activate_sound.play()  # Special sound for shield
                     print("Shield activated at full strength!")
+                elif isinstance(p, WeaponPowerup):
+                    weapon.collect(p.kind)
+                    upgrade_activate_sound.play()
+                    banner = f"{weapon.label}!"
+                    banner_timer = 1200
                 score += 2
 
-            # Shark collides with friendly submarine: lose energy
-            sub_hit = pygame.sprite.spritecollide(shark, subs, False, pixels_touch)
-            if sub_hit:
-                energy -= 20
-                submarine_collision_sound.play()  # Add submarine collision sound
-                print("Ouch! Collided with friendly submarine.")
-                for s in sub_hit:
-                    s.kill()
-
-            # Out of energy from a submarine hit or from swimming: checked after
+            # Out of energy from swimming: checked after
             # eating so a fish caught on the last drop still saves the shark
             if energy <= 0 and not game_over:
                 fatal_collision_sound.play()
@@ -1004,25 +1070,23 @@ def main():
         graphics_enhancer.add_bubble_sources(bubble_sources)
         
         all_sprites.draw(screen)
+        shark_look.draw_shark(screen, shark, weapon.kind, frame_ms)
+        shark_look.draw_shield(screen, shark.rect.center, shield_strength if shield_active else 0,
+                               pygame.time.get_ticks(), frame_ms)
+        for sprite in obstacles:
+            if isinstance(sprite, Enemy):
+                sprite.draw_warning(screen)
         particles.draw(screen)
         enhanced_particles.draw(screen)
         # Blink a ring around the shark while it can't be hurt by the coastline
         if bank_invuln > 0 and int(bank_invuln / 100) % 2:
             pygame.draw.circle(screen, (255, 255, 255), shark.rect.center, 62, 2)
-        if shield_active and shield_strength > 0:
-            # Draw white arc directly in front of the shark's mouth
-            arc_width = 80
-            arc_height = 60
-            arc_x = shark.rect.centerx - arc_width // 2
-            arc_y = shark.rect.centery - arc_height // 2 - 30  # Move arc up to align with mouth
-            arc_rect = pygame.Rect(arc_x, arc_y, arc_width, arc_height)
-            pygame.draw.arc(screen, (255,255,255), arc_rect, 0.57, 2.57, 6)
-        if eel:
-            eel.draw(screen)
+        if boss:
+            boss.draw(screen)
         hud.draw(screen, shark.rect, energy, shield_strength if shield_active else 0, shark.laser_energy,
-                 upgrade_active, shark.missiles, shark.torpedoes, score, pygame.time.get_ticks())
-        if eel:
-            hud.draw_boss_bar(screen, "GIANT MORAY", eel.health / eel.max_health)
+                 weapon.label, shark.missiles, shark.torpedoes, score, pygame.time.get_ticks())
+        if boss:
+            hud.draw_boss_bar(screen, boss.name, boss.health / boss.max_health)
         if banner and banner_timer > 0:
             hud.draw_banner(screen, banner, (255, 225, 90))
 

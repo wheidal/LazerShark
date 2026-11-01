@@ -11,8 +11,10 @@ from graphics_enhancements import ParticleEffects
 from obstacle import OBSTACLE_TYPES
 from player import Shark
 from player_enhanced import SharkWithSprites
+from shark_look import SharkLook
 from powerup import LaserPowerup, MissilePowerup, ShieldPowerup, TorpedoPowerup
 from projectile import Laser
+from weapons import weapon_icon
 
 SPAWN_STEPS = 80
 FISH_CHANCE = 0.35
@@ -23,7 +25,7 @@ BLINK_MS = 500
 TITLE_COLOR = (255, 70, 50)
 TITLE_SHADOW = (30, 6, 10)
 PROMPT_COLOR = (255, 235, 120)
-BRIEFING_MS = 9000  # Any key skips it sooner
+BRIEFING_MS = 7000  # Per page. Any key moves on sooner
 
 
 def _outlined(font, text, color, outline=TITLE_SHADOW, width=3):
@@ -64,6 +66,7 @@ class AttractMode:
         for chunk, y in self.director.prefill():
             self.banks.add(chunk.build(y))
         self.steps = 0
+        self.look = SharkLook()
 
     def _channel_at_shark(self):
         """The open water alongside and just ahead of the shark."""
@@ -140,7 +143,7 @@ class AttractMode:
         self.enhancer.render_background()
         for group in (self.banks, self.foods, self.obstacles, self.shots):
             group.draw(self.screen)
-        self.screen.blit(self.shark.image, self.shark.rect)
+        self.look.draw_shark(self.screen, self.shark)
         self.particles.draw(self.screen)
         self.enhancer.render_effects()
 
@@ -154,11 +157,11 @@ class AttractMode:
         if now // BLINK_MS % 2 == 0:
             prompt = _outlined(self.font, "PRESS ANY KEY TO START", PROMPT_COLOR, (0, 0, 0), 2)
             screen.blit(prompt, prompt.get_rect(center=(400, 400)))
-        hint = _outlined(self.small, "S: SETTINGS     F11: FULL SCREEN     ESC: QUIT", (225, 235, 240), (0, 0, 0), 2)
+        hint = _outlined(self.small, "S: SETTINGS   1-5: JUMP TO A BOSS   F11: FULL SCREEN   ESC: QUIT", (225, 235, 240), (0, 0, 0), 2)
         screen.blit(hint, hint.get_rect(center=(400, 565)))
 
 
-def _briefing_rows():
+def _power_up_rows():
     fish = SmallFish(0, 0).image
     return [
         (fish, "Fish", "+20 energy. You burn energy just by swimming, so keep eating"),
@@ -169,44 +172,69 @@ def _briefing_rows():
     ]
 
 
+def _weapon_rows():
+    return [
+        (weapon_icon('fan'), "Fan laser", "A wide spread of shots. Great against swarms"),
+        (weapon_icon('chum'), "Chum Cannon", "Sprays red plasma balls across a huge 116-degree arc"),
+        (weapon_icon('rapid'), "Rapid laser", "Fires much faster, and empties your laser much faster"),
+        (weapon_icon('beam'), "Piercing beam", "A slow, heavy shot that passes through everything"),
+    ]
+
+
 class Briefing:
     def __init__(self, screen, keymap):
         self.screen = screen
         self.keymap = keymap
-        self.title = _outlined(pygame.font.SysFont(None, 56), "POWER-UPS", PROMPT_COLOR, (0, 0, 0), 2)
         self.name_font = pygame.font.SysFont(None, 30)
         self.text_font = pygame.font.SysFont(None, 24)
-        self.rows = _briefing_rows()
+        title_font = pygame.font.SysFont(None, 56)
+        self.pages = [
+            (_outlined(title_font, "POWER-UPS", PROMPT_COLOR, (0, 0, 0), 2), _power_up_rows(),
+             ["Watch for the tuna's flashing charge and the manta's red aiming line!"]),
+            (_outlined(title_font, "WEAPONS", PROMPT_COLOR, (0, 0, 0), 2), _weapon_rows(),
+             ["Grab the same letter to power up, to level 3. A new letter swaps weapon.",
+              "Taking a hit costs a level. Destroying 5 obstacles earns one."]),
+        ]
+        self.page = 0
         self.elapsed = 0
 
     @property
     def finished(self):
-        return self.elapsed >= BRIEFING_MS
+        return self.page >= len(self.pages)
+
+    def next_page(self):
+        self.page += 1
+        self.elapsed = 0
 
     def _key(self, action):
         return pygame.key.name(self.keymap[action]).upper()
 
     def draw(self, dt):
         self.elapsed += dt
+        if self.elapsed >= BRIEFING_MS:
+            self.next_page()
+        if self.finished:
+            return
+        title, rows, notes = self.pages[self.page]
         screen = self.screen
         panel = pygame.Surface((740, 510), pygame.SRCALPHA)
         panel.fill((6, 18, 36, 225))
         screen.blit(panel, (30, 45))
-        screen.blit(self.title, self.title.get_rect(midtop=(400, 58)))
+        screen.blit(title, title.get_rect(midtop=(400, 58)))
         y = 118
-        for icon, name, text in self.rows:
+        for icon, name, text in rows:
             screen.blit(icon, icon.get_rect(center=(90, y + 20)))
             screen.blit(self.name_font.render(name, True, (255, 255, 255)), (135, y))
             screen.blit(self.text_font.render(text, True, (190, 215, 230)), (135, y + 24))
             y += 58
-        lines = ["Destroy 5 obstacles for 10 seconds of triple laser. Don't ram the friendly subs!",
-                 f"{self._key('fire')}: laser     {self._key('missile')}: missile     "
-                 f"{self._key('torpedo')}: torpedo     {self._key('pause')}: pause"]
-        for line in lines:
+        controls = (f"{self._key('fire')}: laser     {self._key('missile')}: missile     "
+                    f"{self._key('torpedo')}: torpedo     {self._key('pause')}: pause")
+        for line in notes + [controls]:
             image = self.text_font.render(line, True, PROMPT_COLOR)
             screen.blit(image, image.get_rect(center=(400, y + 10)))
             y += 28
-        prompt = self.text_font.render("Press any key to dive in", True, (255, 255, 255))
+        words = "Press any key to dive in" if self.page == len(self.pages) - 1 else "Press any key for weapons"
+        prompt = self.text_font.render(words, True, (255, 255, 255))
         screen.blit(prompt, prompt.get_rect(center=(400, 518)))
-        share = max(0, 1 - self.elapsed / BRIEFING_MS)  # Time left before the game starts anyway
+        share = max(0, 1 - self.elapsed / BRIEFING_MS)  # Time left on this page
         pygame.draw.rect(screen, PROMPT_COLOR, (200, 536, int(400 * share), 6), border_radius=3)

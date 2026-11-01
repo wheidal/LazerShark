@@ -63,6 +63,9 @@ class CoralReef(pygame.sprite.Sprite):
 	reward = 3
 	counts_for_rewards = True
 	blast_radius = 0
+	blast_damage = 0
+	drops_pickup = False
+	bursts_on_coast = False
 	debris_color = (238, 150, 110)
 
 	def __init__(self, x, y):
@@ -112,6 +115,9 @@ class Shipwreck(pygame.sprite.Sprite):
 	reward = 5
 	counts_for_rewards = True
 	blast_radius = 0
+	blast_damage = 0
+	drops_pickup = False
+	bursts_on_coast = False
 	debris_color = (170, 120, 80)
 
 	def __init__(self, x, y):
@@ -155,6 +161,8 @@ class SeaMine(pygame.sprite.Sprite):
 	counts_for_rewards = True
 	blast_radius = 130
 	blast_damage = 20  # To a shark caught too close when a mine is shot
+	drops_pickup = False
+	bursts_on_coast = False
 	debris_color = (255, 170, 60)
 	BLINK_STEPS = 24
 
@@ -200,6 +208,9 @@ class Jellyfish(pygame.sprite.Sprite):
 	reward = 1
 	counts_for_rewards = False  # Swarms are easy kills, so they mustn't earn shields and upgrades
 	blast_radius = 0
+	blast_damage = 0
+	drops_pickup = False
+	bursts_on_coast = False
 	debris_color = (230, 170, 235)
 	SWAY = 22
 	SWAY_SPEED = 0.03

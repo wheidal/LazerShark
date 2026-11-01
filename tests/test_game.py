@@ -110,13 +110,13 @@ def test_pause_freezes_timers(play):
 
     def script(state, frame):
         if frame == 1:
-            state['upgrade_active'], state['upgrade_timer'] = True, 5000
+            state['banner_timer'] = 5000
             press(pygame.K_p)
         if frame == 3:
             seen['paused'] = state['paused']
-            seen['start'] = state['upgrade_timer']
+            seen['start'] = state['banner_timer']
         if frame == 40:
-            seen['end'] = state['upgrade_timer']
+            seen['end'] = state['banner_timer']
             return True
 
     play(script)

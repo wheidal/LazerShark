@@ -5,7 +5,7 @@ from hud import FADED_ALPHA, Hud, MARGIN, STATUS_SIZE
 FAR_AWAY = pygame.Rect(400, 500, 45, 104)
 
 
-def draw(hud, screen, shark=FAR_AWAY, energy=100, shield=0, laser=100, triple=False,
+def draw(hud, screen, shark=FAR_AWAY, energy=100, shield=0, laser=100, triple=None,
          missiles=3, torpedoes=1, score=0, now=0):
     hud.draw(screen, shark, energy, shield, laser, triple, missiles, torpedoes, score, now)
 
@@ -13,7 +13,7 @@ def draw(hud, screen, shark=FAR_AWAY, energy=100, shield=0, laser=100, triple=Fa
 def test_panels_stay_in_the_corners_at_any_value(display):
     hud = Hud()
     for values in ({'energy': -20}, {'energy': 250, 'shield': 500, 'laser': 500},
-                   {'score': 123456789012}, {'missiles': 0, 'torpedoes': 0}, {'triple': True}):
+                   {'score': 123456789012}, {'missiles': 0, 'torpedoes': 0}, {'triple': 'CHUM 3'}):
         display.fill((0, 0, 0))
         draw(hud, display, **values)
         assert display.get_at((400, 300))[:3] == (0, 0, 0)  # The play area stays untouched

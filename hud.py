@@ -40,7 +40,8 @@ class Hud:
         self.labels = {text: self.small.render(text, True, LABEL_COLOR)
                        for text in ('ENERGY', 'SHIELD', 'LASER', 'MISSILE', 'TORPEDO')}
         self.dim_shield = self.small.render('SHIELD', True, DIM_COLOR)
-        self.triple = self.small.render('x3', True, (255, 255, 255))
+        self.shown_weapon = None
+        self.weapon_text = None
         self.boss_font = pygame.font.SysFont(None, 26)
         self.banner_font = pygame.font.SysFont(None, 44)
         self.status = pygame.Surface(STATUS_SIZE, pygame.SRCALPHA)
@@ -80,7 +81,7 @@ class Hud:
         panel.set_alpha(FADED_ALPHA if rect.colliderect(shark_rect) else None)
         screen.blit(panel, rect)
 
-    def draw(self, screen, shark_rect, energy, shield, laser, triple_laser, missiles, torpedoes, score, now):
+    def draw(self, screen, shark_rect, energy, shield, laser, weapon_label, missiles, torpedoes, score, now):
         """shield is 0 when no shield is up. now is the time in ms, which drives the warning flash."""
         status = self.status
         self._clear(status)
@@ -93,8 +94,11 @@ class Hud:
         self._bar(status, ROW_Y[1], shield, SHIELD_COLOR)
         status.blit(self.labels['LASER'], (8, ROW_Y[2]))
         self._bar(status, ROW_Y[2], laser, LASER_COLOR)
-        if triple_laser:
-            status.blit(self.triple, (BAR_X + BAR_W - self.triple.get_width() - 3, ROW_Y[2]))
+        if weapon_label:
+            if weapon_label != self.shown_weapon:
+                self.shown_weapon = weapon_label
+                self.weapon_text = self.small.render(weapon_label, True, (255, 255, 255))
+            status.blit(self.weapon_text, (BAR_X + BAR_W - self.weapon_text.get_width() - 3, ROW_Y[2]))
         self._show(screen, status, (MARGIN, MARGIN), shark_rect)
 
         if score != self.shown_score:

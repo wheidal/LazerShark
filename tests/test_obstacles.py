@@ -4,6 +4,7 @@ import pygame
 import pytest
 
 import channel as ch
+from enemies import Enemy
 from obstacle import CoralReef, Jellyfish, OBSTACLE_TYPES, SeaMine, Shipwreck
 from projectile import Laser, Missile
 
@@ -109,6 +110,8 @@ def test_every_kind_keeps_clear_of_the_coast_in_play(play, monkeypatch):
 
     def script(state, frame):
         for sprite in state['obstacles']:
+            if isinstance(sprite, Enemy):
+                continue
             seen['kinds'].add(sprite.kind)
             if pygame.sprite.spritecollideany(sprite, state['banks'], pygame.sprite.collide_mask):
                 seen['touches'] += 1

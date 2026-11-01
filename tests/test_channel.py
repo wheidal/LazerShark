@@ -5,6 +5,7 @@ import pygame
 import pytest
 
 import channel as ch
+from enemies import Enemy
 from food import SmallFish
 from projectile import Laser, Missile, Torpedo
 
@@ -123,8 +124,10 @@ def test_spawned_sprites_never_touch_the_coast(play):
     seen = {'touches': 0, 'spawned': set()}
 
     def script(state, frame):
-        for group in ('obstacles', 'foods', 'powerups', 'subs'):
+        for group in ('obstacles', 'foods', 'powerups'):
             for sprite in state[group]:
+                if isinstance(sprite, Enemy):
+                    continue
                 seen['spawned'].add(sprite)
                 if pygame.sprite.spritecollideany(sprite, state['banks'], pygame.sprite.collide_mask):
                     seen['touches'] += 1
