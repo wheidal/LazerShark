@@ -41,6 +41,8 @@ class Hud:
                        for text in ('ENERGY', 'SHIELD', 'LASER', 'MISSILE', 'TORPEDO')}
         self.dim_shield = self.small.render('SHIELD', True, DIM_COLOR)
         self.triple = self.small.render('x3', True, (255, 255, 255))
+        self.boss_font = pygame.font.SysFont(None, 26)
+        self.banner_font = pygame.font.SysFont(None, 44)
         self.status = pygame.Surface(STATUS_SIZE, pygame.SRCALPHA)
         self.score_panel = pygame.Surface(SCORE_SIZE, pygame.SRCALPHA)
         self.shown_score = None
@@ -111,3 +113,23 @@ class Hud:
         panel.blit(self.labels['TORPEDO'], (8, 48))
         self._pips(panel, 48, torpedoes, TORPEDO_COLOR)
         self._show(screen, panel, (screen.get_width() - SCORE_SIZE[0] - MARGIN, MARGIN), shark_rect)
+
+    def draw_boss_bar(self, screen, name, share):
+        """A wide bar along the bottom, clear of the corner panels and of the eel's lunges."""
+        w, h = 420, 16
+        x, y = (screen.get_width() - w) // 2, screen.get_height() - h - 12
+        label = self.boss_font.render(name, True, LABEL_COLOR)
+        screen.blit(label, (x, y - label.get_height() - 2))
+        pygame.draw.rect(screen, EMPTY_COLOR, (x, y, w, h), border_radius=4)
+        filled = int(w * max(0, min(1, share)))
+        if filled:
+            pygame.draw.rect(screen, ENERGY_LOW_COLOR, (x, y, filled, h), border_radius=4)
+        pygame.draw.rect(screen, LABEL_COLOR, (x, y, w, h), 1, border_radius=4)
+
+    def draw_banner(self, screen, text, color):
+        image = self.banner_font.render(text, True, color)
+        rect = image.get_rect(center=(screen.get_width() // 2, 150))
+        backing = pygame.Surface((rect.width + 40, rect.height + 20), pygame.SRCALPHA)
+        backing.fill(PANEL_COLOR)
+        screen.blit(backing, backing.get_rect(center=rect.center))
+        screen.blit(image, rect)

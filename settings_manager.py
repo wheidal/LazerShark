@@ -28,6 +28,7 @@ class SettingsManager:
             'sfx_volume': 1.0,
             'controller_enabled': False,
             'easy_mode': False,
+            'difficulty': 'normal',
             'keymap': {
                 'left': pygame.K_LEFT,
                 'right': pygame.K_RIGHT,

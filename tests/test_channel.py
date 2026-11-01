@@ -55,7 +55,7 @@ def test_visited_zones_keep_their_promised_widths():
         for left, right, zone in samples_for(seed, 500, 3000):
             seen.add(zone)
             assert min(800, right) - max(0, left) >= ch.NARROWEST_PASS - 2 * ch.COAST_ROUGHNESS - 2
-    assert seen == set(ch.ZONES)
+    assert seen == ch.ROUTE_ZONES
 
 
 def test_passes_narrow_with_score_but_never_too_far():
@@ -267,10 +267,10 @@ def test_steering_bot_follows_every_zone_unharmed(play, monkeypatch, seed):
         seen['hit'] = seen['hit'] or state['bank_invuln'] > 0
         seen['zones'].add(state['channel'].zone)
         state['energy'] = 100
-        return len(seen['zones']) == len(ch.ZONES) and frame > 1200
+        return len(seen['zones']) == len(ch.ROUTE_ZONES) and frame > 1200
 
     play(script, max_frames=9000)
-    assert seen['zones'] == set(ch.ZONES)
+    assert seen['zones'] == ch.ROUTE_ZONES
     assert not seen['hit']
 
 

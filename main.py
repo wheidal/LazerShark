@@ -23,6 +23,9 @@ from settings_manager import SettingsManager
 from resources import resource_path
 from channel import ChannelDirector, BANK_DAMAGE, BANK_INVULN_MS, BANK_PUSH
 from hud import Hud
+from attract import AttractMode, Briefing
+from boss import (MorayEel, BOSS_SCORE, CONTACT_INVULN_MS, DEFAULT_DIFFICULTY, DIFFICULTIES, HEAD_LASER_DAMAGE,
+                  HEAVY_DAMAGE, LASER_DAMAGE, LASER_RECHARGE, VICTORY_SCORE)
 
 # The simulation always advances in 60 Hz steps, so game speed doesn't depend on frame rate
 STEP_MS = 1000 / 60
@@ -114,7 +117,11 @@ def main():
     # Track destroyed obstacles for shield spawn
     destroyed_counts = {}
 
-    screen = pygame.display.set_mode((800, 600))
+    # Drawn at 800x600 and scaled up to suit the monitor; F11 goes full screen
+    try:
+        screen = pygame.display.set_mode((800, 600), pygame.SCALED | pygame.RESIZABLE)
+    except pygame.error:
+        screen = pygame.display.set_mode((800, 600))
     pygame.display.set_caption("Lazer Shark Kill! Kill!")
     clock = pygame.time.Clock()
     font = pygame.font.SysFont(None, 32)
@@ -136,6 +143,9 @@ def main():
     
     controller_enabled = settings_manager.get('controller_enabled', False)
     easy_mode = settings_manager.get('easy_mode', False)
+    difficulty = settings_manager.get('difficulty', DEFAULT_DIFFICULTY)
+    if difficulty not in DIFFICULTIES:
+        difficulty = DEFAULT_DIFFICULTY
     
     # Music settings
     music_enabled = settings_manager.get('music_enabled', True)
@@ -149,139 +159,199 @@ def main():
         controller = pygame.joystick.Joystick(0)
         controller.init()
         print(f"Controller detected: {controller.get_name()}")
-    menu_items = [
-        'Remap Keys',
-        'Toggle Controller',
-        'Toggle Easy Mode',
-        'Toggle Music',
-        'Music Volume',
-        'Continue'
-    ]
-    selected = 0
-    in_settings = True
-    adjusting_volume = False
-    while in_settings:
-        screen.fill((0, 0, 64))
-        title = title_font.render("Settings", True, (255, 255, 0))
-        screen.blit(title, (250, 80))
+    def run_settings():
+        nonlocal controller_enabled, easy_mode, difficulty, music_enabled, music_volume
+        menu_items = [
+            'Remap Keys',
+            'Toggle Controller',
+            'Toggle Easy Mode',
+            'Toggle Music',
+            'Music Volume',
+            'Difficulty',
+            'Continue'
+        ]
+        selected = 0
+        in_settings = True
+        adjusting_volume = False
+        while in_settings:
+            screen.fill((0, 0, 64))
+            title = title_font.render("Settings", True, (255, 255, 0))
+            screen.blit(title, (250, 80))
         
-        # Show volume adjustment instructions when adjusting
-        if adjusting_volume:
-            instructions = font.render("Use LEFT/RIGHT arrows to adjust, ENTER to confirm", True, (200, 200, 200))
-            screen.blit(instructions, (120, 500))
-        for i, item in enumerate(menu_items):
-            color = (255, 255, 255) if i != selected else (0, 255, 0)
-            if item == 'Toggle Controller':
-                label = f"{item}: {'ON' if controller_enabled else 'OFF'}"
-            elif item == 'Toggle Easy Mode':
-                label = f"{item}: {'ON' if easy_mode else 'OFF'}"
-            elif item == 'Toggle Music':
-                label = f"{item}: {'ON' if music_enabled else 'OFF'}"
-            elif item == 'Music Volume':
-                label = f"{item}: {int(music_volume * 100)}%"
-                # Draw volume bar
-                if i == selected and adjusting_volume:
-                    pygame.draw.rect(screen, (100, 100, 100), (420, 180 + i * 50, 200, 20))
-                    pygame.draw.rect(screen, (0, 255, 0), (420, 180 + i * 50, int(200 * music_volume), 20))
-            else:
-                label = item
-            text = font.render(label, True, color)
-            screen.blit(text, (220, 180 + i * 50))
-        pygame.display.flip()
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            if event.type == pygame.KEYDOWN:
-                if not adjusting_volume:
-                    if event.key == pygame.K_UP:
-                        menu_beep_sound.play()
-                        selected = (selected - 1) % len(menu_items)
-                    elif event.key == pygame.K_DOWN:
-                        menu_beep_sound.play()
-                        selected = (selected + 1) % len(menu_items)
-                    elif event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
-                        powerup_collect_sound.play()  # Menu selection sound
-                        if menu_items[selected] == 'Remap Keys':
-                            # Simple remap: cycle through actions and wait for key press
-                            remap_actions = list(keymap.keys())
-                            for action in remap_actions:
-                                waiting = True
-                                while waiting:
-                                    screen.fill((0, 0, 64))
-                                    prompt = font.render(f"Press new key for {action.upper()}", True, (255, 255, 255))
-                                    screen.blit(prompt, (180, 280))
-                                    pygame.display.flip()
-                                    for e in pygame.event.get():
-                                        if e.type == pygame.QUIT:
-                                            pygame.quit()
-                                            sys.exit()
-                                        if e.type == pygame.KEYDOWN:
-                                            menu_beep_sound.play()  # Key remap confirmation
-                                            keymap[action] = e.key
-                                            waiting = False
-                        elif menu_items[selected] == 'Toggle Controller':
-                            controller_enabled = not controller_enabled
-                            if controller_enabled and not controller:
-                                print("Warning: No controller detected. Please connect a controller.")
-                            elif controller_enabled and controller:
-                                print(f"Controller enabled: {controller.get_name()}")
-                            else:
-                                print("Controller disabled")
-                        elif menu_items[selected] == 'Toggle Easy Mode':
-                            easy_mode = not easy_mode
-                        elif menu_items[selected] == 'Toggle Music':
-                            music_enabled = not music_enabled
-                            if audio_available:
-                                if music_enabled:
-                                    pygame.mixer.music.unpause()
-                                else:
-                                    pygame.mixer.music.pause()
-                        elif menu_items[selected] == 'Music Volume':
-                            adjusting_volume = True
-                        elif menu_items[selected] == 'Continue':
-                            # Save settings before continuing
-                            settings_manager.update(
-                                keymap=keymap,
-                                controller_enabled=controller_enabled,
-                                easy_mode=easy_mode,
-                                music_enabled=music_enabled,
-                                music_volume=music_volume,
-                                sfx_volume=sfx_volume
-                            )
-                            settings_manager.save_settings()
-                            in_settings = False
+            # Show volume adjustment instructions when adjusting
+            if adjusting_volume:
+                instructions = font.render("Use LEFT/RIGHT arrows to adjust, ENTER to confirm", True, (200, 200, 200))
+                screen.blit(instructions, (120, 540))
+            for i, item in enumerate(menu_items):
+                color = (255, 255, 255) if i != selected else (0, 255, 0)
+                if item == 'Toggle Controller':
+                    label = f"{item}: {'ON' if controller_enabled else 'OFF'}"
+                elif item == 'Toggle Easy Mode':
+                    label = f"{item}: {'ON' if easy_mode else 'OFF'}"
+                elif item == 'Toggle Music':
+                    label = f"{item}: {'ON' if music_enabled else 'OFF'}"
+                elif item == 'Music Volume':
+                    label = f"{item}: {int(music_volume * 100)}%"
+                    # Draw volume bar
+                    if i == selected and adjusting_volume:
+                        pygame.draw.rect(screen, (100, 100, 100), (420, 180 + i * 50, 200, 20))
+                        pygame.draw.rect(screen, (0, 255, 0), (420, 180 + i * 50, int(200 * music_volume), 20))
+                elif item == 'Difficulty':
+                    label = f"{item}: {difficulty.upper()}"
                 else:
-                    # Volume adjustment mode
-                    if event.key == pygame.K_LEFT:
-                        music_volume = max(0, music_volume - 0.1)
-                        if audio_available:
-                            pygame.mixer.music.set_volume(music_volume)
-                        menu_beep_sound.play()
-                    elif event.key == pygame.K_RIGHT:
-                        music_volume = min(1.0, music_volume + 0.1)
-                        if audio_available:
-                            pygame.mixer.music.set_volume(music_volume)
-                        menu_beep_sound.play()
-                    elif event.key == pygame.K_RETURN or event.key == pygame.K_ESCAPE:
-                        adjusting_volume = False
-                        powerup_collect_sound.play()
+                    label = item
+                text = font.render(label, True, color)
+                screen.blit(text, (220, 180 + i * 50))
+            pygame.display.flip()
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                if event.type == pygame.KEYDOWN:
+                    if not adjusting_volume:
+                        if event.key == pygame.K_UP:
+                            menu_beep_sound.play()
+                            selected = (selected - 1) % len(menu_items)
+                        elif event.key == pygame.K_DOWN:
+                            menu_beep_sound.play()
+                            selected = (selected + 1) % len(menu_items)
+                        elif event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
+                            powerup_collect_sound.play()  # Menu selection sound
+                            if menu_items[selected] == 'Remap Keys':
+                                # Simple remap: cycle through actions and wait for key press
+                                remap_actions = list(keymap.keys())
+                                for action in remap_actions:
+                                    waiting = True
+                                    while waiting:
+                                        screen.fill((0, 0, 64))
+                                        prompt = font.render(f"Press new key for {action.upper()}", True, (255, 255, 255))
+                                        screen.blit(prompt, (180, 280))
+                                        pygame.display.flip()
+                                        for e in pygame.event.get():
+                                            if e.type == pygame.QUIT:
+                                                pygame.quit()
+                                                sys.exit()
+                                            if e.type == pygame.KEYDOWN:
+                                                menu_beep_sound.play()  # Key remap confirmation
+                                                keymap[action] = e.key
+                                                waiting = False
+                            elif menu_items[selected] == 'Toggle Controller':
+                                controller_enabled = not controller_enabled
+                                if controller_enabled and not controller:
+                                    print("Warning: No controller detected. Please connect a controller.")
+                                elif controller_enabled and controller:
+                                    print(f"Controller enabled: {controller.get_name()}")
+                                else:
+                                    print("Controller disabled")
+                            elif menu_items[selected] == 'Toggle Easy Mode':
+                                easy_mode = not easy_mode
+                            elif menu_items[selected] == 'Toggle Music':
+                                music_enabled = not music_enabled
+                                if audio_available:
+                                    if music_enabled:
+                                        pygame.mixer.music.unpause()
+                                    else:
+                                        pygame.mixer.music.pause()
+                            elif menu_items[selected] == 'Music Volume':
+                                adjusting_volume = True
+                            elif menu_items[selected] == 'Difficulty':
+                                levels = list(DIFFICULTIES)
+                                difficulty = levels[(levels.index(difficulty) + 1) % len(levels)]
+                            elif menu_items[selected] == 'Continue':
+                                # Save settings before continuing
+                                settings_manager.update(
+                                    keymap=keymap,
+                                    controller_enabled=controller_enabled,
+                                    easy_mode=easy_mode,
+                                    difficulty=difficulty,
+                                    music_enabled=music_enabled,
+                                    music_volume=music_volume,
+                                    sfx_volume=sfx_volume
+                                )
+                                settings_manager.save_settings()
+                                in_settings = False
+                    else:
+                        # Volume adjustment mode
+                        if event.key == pygame.K_LEFT:
+                            music_volume = max(0, music_volume - 0.1)
+                            if audio_available:
+                                pygame.mixer.music.set_volume(music_volume)
+                            menu_beep_sound.play()
+                        elif event.key == pygame.K_RIGHT:
+                            music_volume = min(1.0, music_volume + 0.1)
+                            if audio_available:
+                                pygame.mixer.music.set_volume(music_volume)
+                            menu_beep_sound.play()
+                        elif event.key == pygame.K_RETURN or event.key == pygame.K_ESCAPE:
+                            adjusting_volume = False
+                            powerup_collect_sound.play()
 
-    # Splash screen
+
+    # Start background music
+    if not audio_available:
+        music_enabled = False
+    elif os.path.exists(background_music_path):
+        pygame.mixer.music.load(background_music_path)
+        pygame.mixer.music.set_volume(music_volume)
+        if music_enabled:
+            pygame.mixer.music.play(-1)  # Loop indefinitely
+        else:
+            # Started paused, so the Settings toggle can turn it on from the title screen
+            pygame.mixer.music.play(-1)
+            pygame.mixer.music.pause()
+        print("Background music loaded and playing!")
+    else:
+        print(f"Warning: Background music file not found: {background_music_path}")
+        music_enabled = False
+    
+    # Start ambient ocean sound loop on a dedicated channel
+    if audio_available:
+        ambient_channel = pygame.mixer.Channel(7)  # Use last channel for ambient
+        ambient_channel.set_volume(sfx_volume * 0.3)  # Ambient at 30% of SFX volume
+        ambient_channel.play(ambient_ocean_sound, loops=-1)  # Loop indefinitely
+    
+    # Title screen: the game plays itself until someone presses a key
+    attract = AttractMode(screen, graphics_enhancer)
     splash = True
     while splash:
-        screen.fill((0, 0, 64))
-        title_text = title_font.render("Lazer Shark Kill! Kill!", True, (255, 0, 0))
-        prompt_text = font.render("Press any key to start", True, (255, 255, 255))
-        screen.blit(title_text, (60, 200))
-        screen.blit(prompt_text, (250, 320))
+        dt = clock.tick(60)
+        attract.update(dt)
+        attract.draw_title(pygame.time.get_ticks())
         pygame.display.flip()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
             if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_F11:
+                    pygame.display.toggle_fullscreen()
+                elif event.key == pygame.K_ESCAPE:
+                    pygame.quit()
+                    sys.exit()
+                elif event.key == pygame.K_s:
+                    run_settings()
+                else:
+                    splash = False
+            if event.type == pygame.JOYBUTTONDOWN:
                 splash = False
+
+    # Quick reminder of what everything does, which any key skips
+    pygame.event.clear()
+    briefing = Briefing(screen, keymap)
+    while not briefing.finished:
+        dt = clock.tick(60)
+        attract.update(dt)
+        attract.draw_world()
+        briefing.draw(dt)
+        pygame.display.flip()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_F11:
+                pygame.display.toggle_fullscreen()
+            elif event.type in (pygame.KEYDOWN, pygame.JOYBUTTONDOWN):
+                briefing.elapsed = 10 ** 9
 
     # Clear event queue and add a short delay to ensure splash screen is removed
     pygame.event.clear()
@@ -305,6 +375,11 @@ def main():
     banks = pygame.sprite.Group()
     channel = start_channel(banks, all_sprites)
     bank_invuln = 0
+    boss_phase = None  # Then 'approach' while the arena scrolls in, 'fight', and 'beaten'
+    eel = None
+    eel_invuln = 0
+    banner = None
+    banner_timer = 0
     particles = pygame.sprite.Group()
     emitter = ParticleEmitter(particles)
     
@@ -331,25 +406,6 @@ def main():
     shield_timer = 0
     next_shield_spawn = random.randint(180000, 300000)  # 3-5 min in ms
     
-    # Start background music
-    if not audio_available:
-        music_enabled = False
-    elif os.path.exists(background_music_path):
-        pygame.mixer.music.load(background_music_path)
-        pygame.mixer.music.set_volume(music_volume)
-        if music_enabled:
-            pygame.mixer.music.play(-1)  # Loop indefinitely
-        print("Background music loaded and playing!")
-    else:
-        print(f"Warning: Background music file not found: {background_music_path}")
-        music_enabled = False
-    
-    # Start ambient ocean sound loop on a dedicated channel
-    if audio_available:
-        ambient_channel = pygame.mixer.Channel(7)  # Use last channel for ambient
-        ambient_channel.set_volume(sfx_volume * 0.3)  # Ambient at 30% of SFX volume
-        ambient_channel.play(ambient_ocean_sound, loops=-1)  # Loop indefinitely
-    
     while running:
         frame_ms = clock.tick(60)
         restart_requested = False
@@ -359,7 +415,9 @@ def main():
                 running = False
             if event.type == pygame.KEYDOWN:
                 # Esc always exits, so a bad remap can't trap the player
-                if event.key in (pygame.K_ESCAPE, keymap['quit']):
+                if event.key == pygame.K_F11:
+                    pygame.display.toggle_fullscreen()
+                elif event.key in (pygame.K_ESCAPE, keymap['quit']):
                     running = False
                 elif event.key == keymap['pause'] and not game_over:
                     paused = not paused
@@ -390,6 +448,11 @@ def main():
                 banks.empty()
                 channel = start_channel(banks, all_sprites)
                 bank_invuln = 0
+                boss_phase = None
+                eel = None
+                eel_invuln = 0
+                banner = None
+                banner_timer = 0
                 particles.empty()
                 enhanced_particles.empty()
                 energy = 100
@@ -515,6 +578,8 @@ def main():
                 sub.pending_drops.clear()
             particles.update()
 
+            shark.laser_energy = min(100, shark.laser_energy + LASER_RECHARGE[difficulty] * STEP_MS / 1000)
+
             # Firing controls (remapped + controller support)
             if keys[keymap['fire']] or controller_fire:
                 # Easy mode: unlimited laser energy
@@ -547,7 +612,7 @@ def main():
                     # Find nearest obstacle
                     nearest = None
                     min_dist = float('inf')
-                    for obs in obstacles:
+                    for obs in list(obstacles) + (eel.targets() if eel else []):
                         dist = abs(obs.rect.centerx - shark.rect.centerx) + abs(obs.rect.centery - shark.rect.centery)
                         if dist < min_dist:
                             min_dist = dist
@@ -565,18 +630,38 @@ def main():
             energy = max(0, min(energy, 100))
 
             # Extend the coastline as it scrolls into view
-            chunk = channel.update(score)
+            arena_locked = boss_phase == 'fight'  # The coast holds still so the eel's lair stays put
+            chunk = None if arena_locked else channel.update(score)
             if chunk:
                 new_banks = chunk.build()
                 banks.add(new_banks)
                 all_sprites.add(new_banks)
 
+            # Reaching the boss score opens up the arena ahead
+            if boss_phase is None and score >= BOSS_SCORE:
+                boss_phase = 'approach'
+                channel.enter_arena()
+                banner = "Something stirs in the reef..."
+                banner_timer = 4000
+            if boss_phase == 'approach' and channel.arena_ready and not obstacles and not subs:
+                boss_phase = 'fight'
+                eel = MorayEel(*channel.arena_edges, difficulty)
+                print(f"Giant moray ({difficulty}): health {eel.health}, bite {eel.bite_damage}, warning {eel.warn_steps} steps")
+                # Everyone starts the fight able to win it, however the journey went
+                shark.laser_energy = 100
+                shark.missiles = max(shark.missiles, 2)
+                shark.torpedoes = max(shark.torpedoes, 1)
+                banner = "GIANT MORAY!"
+                banner_timer = 2000
+            banner_timer -= dt
+
             # Spawn obstacles and food every 1.5 seconds, inside the channel
             spawn_timer += dt
             if spawn_timer > 1500:
                 spawn_timer = 0
-                if random.random() < 0.5:  # 50% fish, 50% whatever lives in this zone
-                    kind = OBSTACLE_TYPES[random.choice(channel.obstacle_kinds())]
+                kinds = channel.obstacle_kinds()  # The arena has none, even while leaving it after a win
+                if kinds and random.random() < 0.5 and boss_phase not in ('approach', 'fight'):  # 50% fish
+                    kind = OBSTACLE_TYPES[random.choice(kinds)]
                     spawn_x = channel.spawn_x(kind.WIDTH, blocking=True, height=kind.HEIGHT)
                     if spawn_x is not None:
                         new_obstacles = kind.create(spawn_x)
@@ -592,7 +677,8 @@ def main():
             if powerup_timer > 4000:
                 powerup_timer = 0
                 px = channel.spawn_x(30)
-                ptype = random.choice(['laser', 'missile', 'torpedo'])
+                # Mostly lasers during a fight, so nobody is left unable to hurt the boss
+                ptype = random.choice(['laser', 'laser', 'missile', 'torpedo'] if eel else ['laser', 'missile', 'torpedo'])
                 if ptype == 'laser':
                     p = LaserPowerup(px, -16)
                 elif ptype == 'missile':
@@ -604,7 +690,7 @@ def main():
 
             # Spawn friendly submarine every 12 seconds, where there's room to pass it
             sub_timer += dt
-            if sub_timer > 12000:
+            if sub_timer > 12000 and boss_phase not in ('approach', 'fight'):
                 sub_timer = 0
                 sx = channel.spawn_x(80, blocking=True)
                 if sx is not None:
@@ -618,6 +704,8 @@ def main():
                 if sprite.rect.top > 600:
                     sprite.kill()
             for sprite in banks:
+                if arena_locked:
+                    break
                 sprite.rect.y += 3
                 if sprite.rect.top > 600:
                     sprite.kill()
@@ -806,6 +894,55 @@ def main():
                         obstacles_destroyed = 0
                         upgrade_activate_sound.play()
 
+            # The eel: bites on contact, and any shot that lands hurts it
+            if eel:
+                eel.update(shark.rect)
+                while eel.rubble_due:
+                    eel.rubble_due -= 1
+                    kind = OBSTACLE_TYPES[random.choice(['coral', 'coral', 'mine'])]
+                    spawn_x = channel.spawn_x(kind.WIDTH, blocking=True, height=kind.HEIGHT)
+                    if spawn_x is not None:
+                        rubble = kind.create(spawn_x)
+                        obstacles.add(rubble)
+                        all_sprites.add(rubble)
+                eel_invuln = max(0, eel_invuln - dt)
+                if eel_invuln <= 0 and pygame.sprite.spritecollideany(shark, eel.parts, pixels_touch):
+                    eel_invuln = CONTACT_INVULN_MS
+                    if shield_active and shield_strength > 0:
+                        shield_activate_sound.play()
+                        shield_strength -= eel.bite_damage
+                        if shield_strength <= 0:
+                            shield_active = False
+                            shield_strength = 0
+                    else:
+                        energy -= eel.bite_damage
+                        generic_collision_sound.play()
+                        graphics_enhancer.trigger_damage_effect()
+                    emitter.emit(shark.rect.center, color=(255,80,60), count=16, size=10, speed=6, lifetime=22)
+                for shot, parts in pygame.sprite.groupcollide(projectiles, eel.parts, True, False, pixels_touch).items():
+                    if isinstance(shot, Laser):
+                        eel.take_damage(HEAD_LASER_DAMAGE if any(p.is_head for p in parts) else LASER_DAMAGE)
+                    else:
+                        eel.take_damage(HEAVY_DAMAGE)
+                    emitter.emit(shot.rect.midtop, color=(255,220,120), count=6, size=5, speed=3, lifetime=12)
+                if eel.dead:
+                    for part in eel.parts:
+                        ParticleEffects.create_explosion(enhanced_particles, part.rect.center,
+                                                        [(255, 120, 30), (255, 210, 80), (180, 220, 100)], 12)
+                    obstacle_destroy_sound.play()
+                    upgrade_activate_sound.play()
+                    print("Giant moray defeated!")
+                    score += VICTORY_SCORE
+                    energy = 100
+                    shark.laser_energy = 100
+                    shark.missiles = 3
+                    shark.torpedoes = 3
+                    channel.leave_arena()
+                    boss_phase = 'beaten'
+                    eel = None
+                    banner = "MORAY DEFEATED!  Fully repaired"
+                    banner_timer = 3500
+
             # Shark eats food: remove food and gain energy
             eaten = pygame.sprite.spritecollide(shark, foods, True)
             if eaten:
@@ -880,8 +1017,14 @@ def main():
             arc_y = shark.rect.centery - arc_height // 2 - 30  # Move arc up to align with mouth
             arc_rect = pygame.Rect(arc_x, arc_y, arc_width, arc_height)
             pygame.draw.arc(screen, (255,255,255), arc_rect, 0.57, 2.57, 6)
+        if eel:
+            eel.draw(screen)
         hud.draw(screen, shark.rect, energy, shield_strength if shield_active else 0, shark.laser_energy,
                  upgrade_active, shark.missiles, shark.torpedoes, score, pygame.time.get_ticks())
+        if eel:
+            hud.draw_boss_bar(screen, "GIANT MORAY", eel.health / eel.max_health)
+        if banner and banner_timer > 0:
+            hud.draw_banner(screen, banner, (255, 225, 90))
 
         # Apply post-processing effects
         graphics_enhancer.render_effects()

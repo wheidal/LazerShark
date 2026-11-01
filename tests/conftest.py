@@ -46,7 +46,7 @@ def play(monkeypatch, tmp_path):
 
         monkeypatch.setattr(pygame.time, 'Clock', FakeClock)
         real_flip = pygame.display.flip
-        pending = list(menu_keys if menu_keys is not None else [pygame.K_DOWN] * 5 + [pygame.K_RETURN])
+        pending = list(menu_keys if menu_keys is not None else [pygame.K_DOWN] * 6 + [pygame.K_RETURN])
         frame = [0]
 
         def flip():
@@ -57,6 +57,8 @@ def play(monkeypatch, tmp_path):
                     press(key)
                 pending.clear()
             elif state.get('splash'):
+                press(pygame.K_s if pending else pygame.K_a)
+            elif 'briefing' in state and 'running' not in state:
                 press(pygame.K_a)
             elif 'running' in state:
                 if quiet:

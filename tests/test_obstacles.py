@@ -62,7 +62,7 @@ def test_missile_destroys_a_wreck_outright(play):
 
 def test_mine_blast_chains_and_spares_distant_obstacles(play):
     def build():
-        return [SeaMine(150, 200), SeaMine(250, 200), CoralReef(340, 200), CoralReef(700, 200)]
+        return [SeaMine(300, 200), SeaMine(400, 200), CoralReef(490, 200), CoralReef(760, 200)]
 
     seen = run_shot(play, build, lambda o: Laser(o.rect.centerx, o.rect.centery))
     assert seen['alive'] == [seen['obstacles'][3]]

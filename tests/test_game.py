@@ -201,5 +201,36 @@ def test_runs_without_audio_device(play, monkeypatch):
     monkeypatch.setenv('SDL_AUDIODRIVER', 'nonexistent')
     # Toggle music and open volume in the menu, then continue
     keys = [pygame.K_DOWN] * 3 + [pygame.K_RETURN, pygame.K_DOWN, pygame.K_RETURN, pygame.K_RIGHT,
-                                  pygame.K_RETURN, pygame.K_DOWN, pygame.K_RETURN]
+                                  pygame.K_RETURN, pygame.K_DOWN, pygame.K_DOWN, pygame.K_RETURN]
     assert play(lambda state, frame: frame >= 5, menu_keys=keys) == 'stopped'
+
+
+def test_laser_recharges_at_the_rate_for_the_difficulty(play):
+    from boss import LASER_RECHARGE
+    seen = {}
+
+    def script(state, frame):
+        if frame == 1:
+            state['shark'].laser_energy = 0
+        if frame == 61:
+            seen['energy'] = state['shark'].laser_energy
+            return True
+
+    play(script)
+    assert abs(seen['energy'] - LASER_RECHARGE['normal']) <= 1
+
+
+def test_full_laser_lasts_several_seconds_of_steady_fire(play):
+    seen = {}
+
+    def script(state, frame):
+        state['energy'] = 100
+        pygame.event.pump()
+        if state['shark'].fire_laser():
+            seen['shots'] = seen.get('shots', 0) + 1
+        if state['shark'].laser_energy < 3:
+            seen['frames'] = frame
+            return True
+
+    play(script, max_frames=2000)
+    assert seen['shots'] >= 30

@@ -23,7 +23,12 @@ ZONES = {
                 'next': ['pass'], 'decor': ['fan', 'table'], 'open_side': True,
                 'obstacles': ['wreck', 'wreck', 'mine', 'jellyfish', 'jellyfish'],
                 'reef': [(92, 120, 138), (58, 76, 106), (40, 54, 88), (28, 40, 72), (18, 28, 56)]},
+    # Only reached through enter_arena, for a boss fight
+    'arena': {'width': (650, 650), 'length': (0, 0), 'bend': (500, 800),
+              'next': ['lagoon'], 'decor': ['brain', 'fan', 'table'], 'obstacles': [],
+              'reef': [(120, 130, 124), (92, 70, 92), (66, 58, 84), (42, 50, 78), (24, 34, 62)]},
 }
+ROUTE_ZONES = set(ZONES) - {'arena'}
 NARROWEST_PASS = 220  # Reached at a score of 400
 PASS_NARROWS_PER_SCORE = 0.4
 OBSTACLE_PASS_ROOM = 110  # Open width needed on one side of an obstacle, bends included
@@ -97,7 +102,18 @@ class ChannelGenerator:
         self.zone_left = self._zone_length()
         self.open_side = self.rng.choice([-1, 1]) if ZONES[self.zone].get('open_side') else 0
 
+    def enter_arena(self):
+        """Open out into the arena once the current bend is finished, and stay there."""
+        self.zone = 'arena'
+        self.zone_left = float('inf')
+        self.open_side = 0
+
+    def leave_arena(self):
+        self.zone_left = 0
+
     def _center_for(self, width):
+        if self.zone == 'arena':
+            return SCREEN_W / 2
         if self.open_side:
             near_edge = width / 2 - self.rng.uniform(*OPEN_SIDE_OVERHANG)
             return near_edge if self.open_side < 0 else SCREEN_W - near_edge
@@ -212,15 +228,26 @@ class ChannelDirector:
         self.score = 0
         self.world_y = 0
         self.reef_colors = ZONES['lagoon']['reef']
+        self.arena_chunks = 0
 
     @property
     def zone(self):
         return self.last_sample[2]
 
+    @staticmethod
+    def _in_settled_arena(sample):
+        """Past the bend leading in, which is already labelled arena but is still moving."""
+        left, right, zone = sample
+        width = ZONES['arena']['width'][0]
+        limit = COAST_ROUGHNESS + 2
+        return (zone == 'arena' and abs(left - (SCREEN_W - width) / 2) <= limit
+                and abs(right - (SCREEN_W + width) / 2) <= limit)
+
     def _next_chunk(self, score):
         samples = ([self.last_sample] if self.last_sample else
                    self.generator.take(1, score)) + self.generator.take(SAMPLES_PER_CHUNK, score)
         self.last_sample = samples[-1]
+        self.arena_chunks = self.arena_chunks + 1 if all(self._in_settled_arena(s) for s in samples) else 0
         self.score = score
         self.recent = (self.recent + samples[1:])[-SPAWN_SAMPLES_BELOW:]
         previous = self.reef_colors
@@ -244,6 +271,22 @@ class ChannelDirector:
             return None
         self.distance -= CHUNK_H
         return self._next_chunk(score)
+
+    def enter_arena(self):
+        self.generator.enter_arena()
+
+    def leave_arena(self):
+        self.generator.leave_arena()
+
+    @property
+    def arena_ready(self):
+        """True once nothing but arena is left on screen."""
+        return self.arena_chunks * CHUNK_H >= SCREEN_H + CHUNK_H
+
+    @property
+    def arena_edges(self):
+        left, right, _ = self.last_sample
+        return left, right
 
     def obstacle_kinds(self):
         return ZONES[self.zone]['obstacles']

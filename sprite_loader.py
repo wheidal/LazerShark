@@ -8,6 +8,8 @@ import os
 from typing import List, Tuple, Optional
 from resources import resource_path
 
+LASER_SHOT_COST = 3
+
 class SpriteSheet:
     """Load and extract sprites from a sprite sheet"""
     
@@ -292,8 +294,8 @@ class EnhancedShark(AnimatedSprite):
     
     def fire_laser(self) -> bool:
         """Fire laser if energy available"""
-        if self.laser_energy >= 5 and self.fire_cooldown <= 0:
-            self.laser_energy -= 5
+        if self.laser_energy >= LASER_SHOT_COST and self.fire_cooldown <= 0:
+            self.laser_energy -= LASER_SHOT_COST
             self.fire_cooldown = 0.1  # 100ms cooldown
             return True
         return False
