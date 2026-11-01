@@ -36,9 +36,9 @@ def test_hazard_needs_to_touch_shark_body(display):
     coral = CoralReef(0, 0)
     coral.rect.midright = (shark.rect.left + 15, shark.rect.centery)
     assert shark.rect.colliderect(coral.rect)
-    assert not game.hits_shark_body(shark, coral)
+    assert not game.pixels_touch(shark, coral)
     coral.rect.center = shark.rect.center
-    assert game.hits_shark_body(shark, coral)
+    assert game.pixels_touch(shark, coral)
 
 
 def test_default_keys_use_pygame_2_codes(monkeypatch, tmp_path):
@@ -110,13 +110,13 @@ def test_pause_freezes_timers(play):
 
     def script(state, frame):
         if frame == 1:
-            state['upgrade_active'], state['upgrade_timer'] = True, 5000
+            state['banner_timer'] = 5000
             press(pygame.K_p)
         if frame == 3:
             seen['paused'] = state['paused']
-            seen['start'] = state['upgrade_timer']
+            seen['start'] = state['banner_timer']
         if frame == 40:
-            seen['end'] = state['upgrade_timer']
+            seen['end'] = state['banner_timer']
             return True
 
     play(script)
@@ -201,5 +201,36 @@ def test_runs_without_audio_device(play, monkeypatch):
     monkeypatch.setenv('SDL_AUDIODRIVER', 'nonexistent')
     # Toggle music and open volume in the menu, then continue
     keys = [pygame.K_DOWN] * 3 + [pygame.K_RETURN, pygame.K_DOWN, pygame.K_RETURN, pygame.K_RIGHT,
-                                  pygame.K_RETURN, pygame.K_DOWN, pygame.K_RETURN]
+                                  pygame.K_RETURN, pygame.K_DOWN, pygame.K_DOWN, pygame.K_RETURN]
     assert play(lambda state, frame: frame >= 5, menu_keys=keys) == 'stopped'
+
+
+def test_laser_recharges_at_the_rate_for_the_difficulty(play):
+    from boss import LASER_RECHARGE
+    seen = {}
+
+    def script(state, frame):
+        if frame == 1:
+            state['shark'].laser_energy = 0
+        if frame == 61:
+            seen['energy'] = state['shark'].laser_energy
+            return True
+
+    play(script)
+    assert abs(seen['energy'] - LASER_RECHARGE['normal']) <= 1
+
+
+def test_full_laser_lasts_several_seconds_of_steady_fire(play):
+    seen = {}
+
+    def script(state, frame):
+        state['energy'] = 100
+        pygame.event.pump()
+        if state['shark'].fire_laser():
+            seen['shots'] = seen.get('shots', 0) + 1
+        if state['shark'].laser_energy < 3:
+            seen['frames'] = frame
+            return True
+
+    play(script, max_frames=2000)
+    assert seen['shots'] >= 30

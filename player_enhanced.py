@@ -86,22 +86,7 @@ class SharkWithSprites(EnhancedShark):
     def enhance_sprite(self, sprite):
         """Apply visual enhancements to the sprite"""
         # Add subtle outline for better visibility
-        sprite = SpriteEffects.add_outline(sprite, (0, 50, 100), 1)
-        
-        # Add cybernetic enhancements (laser mount)
-        # This could be drawn on top of the sprite
-        enhanced = sprite.copy()
-        
-        # Add laser mount indicator
-        mount_rect = pygame.Rect(
-            enhanced.get_width() // 2 - 4,
-            enhanced.get_height() // 4,
-            8, 6
-        )
-        pygame.draw.rect(enhanced, (150, 150, 180), mount_rect)
-        pygame.draw.circle(enhanced, (255, 50, 50), mount_rect.center, 2)
-        
-        return enhanced
+        return SpriteEffects.add_outline(sprite, (0, 50, 100), 1)
     
     def create_shield_effect(self):
         """Create a shield bubble effect"""

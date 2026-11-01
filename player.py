@@ -3,6 +3,7 @@ Player (Shark) logic and animation.
 Temporary shark sprite for prototyping (16x32 px, top-down, simple blue shape).
 """
 import pygame
+from sprite_loader import LASER_SHOT_COST
 import os
 import math
 
@@ -169,10 +170,10 @@ class Shark(pygame.sprite.Sprite):
 		# Fallback update method for sprite group compatibility
 		pass
 
-	def fire_laser(self):
-		if self.laser_energy >= 10 and self.fire_cooldown <= 0:
-			self.laser_energy -= 10
-			self.fire_cooldown = 300  # ms cooldown
+	def fire_laser(self, cost=LASER_SHOT_COST, cooldown=0.3):
+		if self.laser_energy >= cost and self.fire_cooldown <= 0:
+			self.laser_energy -= cost
+			self.fire_cooldown = cooldown * 1000  # ms
 			print("Laser fired!")
 			return True
 		return False
