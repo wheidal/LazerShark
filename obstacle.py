@@ -212,13 +212,14 @@ class Jellyfish(pygame.sprite.Sprite):
 	drops_pickup = False
 	bursts_on_coast = False
 	debris_color = (230, 170, 235)
+	_art = staticmethod(_jelly)
 	SWAY = 22
 	SWAY_SPEED = 0.03
 	PULSE_STEPS = 20
 
 	def __init__(self, x, y):
 		super().__init__()
-		self.frames = [_cached(('jelly', pulse), lambda: _jelly(pulse)) for pulse in (False, True)]
+		self.frames = [_cached((self.kind, pulse), lambda: self._art(pulse)) for pulse in (False, True)]
 		self.image = self.frames[0]
 		self.mask = pygame.mask.from_surface(self.image, 127)
 		self.rect = self.image.get_rect(midtop=(x, y))
@@ -239,7 +240,95 @@ class Jellyfish(pygame.sprite.Sprite):
 				for _ in range(random.randint(3, 5))]
 
 
-OBSTACLE_TYPES = {cls.kind: cls for cls in (CoralReef, Shipwreck, SeaMine, Jellyfish)}
+def _emp_jelly(pulse):
+	art = pygame.Surface((36, 46), pygame.SRCALPHA)
+	bell_w = 32 if pulse else 27
+	left = 18 - bell_w // 2
+	for i in range(5):
+		x = left + 3 + i * (bell_w - 6) // 4
+		points = [(x + (3 if y // 4 % 2 else -3), y) for y in range(18, 45, 4)]  # Jagged, like sparks
+		pygame.draw.lines(art, (255, 245, 110), False, points, 2)
+	pygame.draw.ellipse(art, (40, 90, 170, 240), (left, 2, bell_w, 22))
+	pygame.draw.ellipse(art, (120, 235, 255, 245), (left + 4, 5, bell_w - 8, 11))
+	pygame.draw.line(art, (255, 255, 180), (18, 4), (14, 12), 2)
+	pygame.draw.line(art, (255, 255, 180), (14, 12), (21, 12), 2)
+	pygame.draw.line(art, (255, 255, 180), (21, 12), (17, 21), 2)
+	pygame.draw.ellipse(art, OUTLINE, (left, 2, bell_w, 22), 1)
+	return _finish(art, outline=False)
+
+
+class EmpJellyfish(Jellyfish):
+	"""Its sting barely hurts, but it knocks out the laser for a moment, even through a shield."""
+	kind = 'emp_jelly'
+	name = "EMP Jellyfish"
+	toughness = 2
+	damage = 6
+	reward = 2
+	debris_color = (140, 235, 255)
+	jams_laser_ms = 2000
+	_art = staticmethod(_emp_jelly)
+
+	@classmethod
+	def create(cls, x):
+		return [cls(x + random.randint(-30, 30), -random.randint(60, cls.HEIGHT)) for _ in range(random.randint(1, 2))]
+
+
+def _barrel(lit):
+	art = pygame.Surface((42, 42), pygame.SRCALPHA)
+	pygame.draw.circle(art, (120, 100, 30), (21, 21), 20)
+	pygame.draw.circle(art, (150, 240, 70) if lit else (232, 196, 50), (21, 21), 17)
+	pygame.draw.circle(art, (70, 60, 24), (21, 21), 17, 2)
+	for i in range(3):  # The radiation trefoil
+		middle = i * math.tau / 3 - math.pi / 2
+		points = [(21, 21)]
+		for step in range(5):
+			angle = middle - 0.5 + step * 0.25
+			points.append((21 + math.cos(angle) * 14, 21 + math.sin(angle) * 14))
+		pygame.draw.polygon(art, (24, 22, 20), points)
+	pygame.draw.circle(art, (232, 196, 50), (21, 21), 4)
+	pygame.draw.circle(art, (24, 22, 20), (21, 21), 2)
+	return _finish(art)
+
+
+class RadiationBarrel(pygame.sprite.Sprite):
+	"""Blinks green, then cracks and leaks a cloud. Shoot it first and there's no leak."""
+	WIDTH, HEIGHT = 48, 48
+	kind = 'barrel'
+	name = "Radiation Barrel"
+	toughness = 1
+	damage = 12
+	reward = 2
+	counts_for_rewards = False
+	blast_radius = 0
+	blast_damage = 0
+	drops_pickup = False
+	bursts_on_coast = False
+	debris_color = (160, 255, 90)
+	LEAK_STEPS = 125
+	BLINK_FROM = 60
+
+	def __init__(self, x, y):
+		super().__init__()
+		self.frames = [_cached(('barrel', lit), lambda: _barrel(lit)) for lit in (False, True)]
+		self.image = self.frames[0]
+		self.mask = pygame.mask.from_surface(self.image, 127)
+		self.rect = self.image.get_rect(midtop=(x, y))
+		self.hits = 0
+		self.age = 0
+		self.leaking = False
+
+	def update(self):
+		self.age += 1
+		if self.age > self.BLINK_FROM:
+			self.image = self.frames[self.age // 8 % 2]
+		self.leaking = self.age >= self.LEAK_STEPS
+
+	@classmethod
+	def create(cls, x):
+		return [cls(x, -cls.HEIGHT)]
+
+
+OBSTACLE_TYPES = {cls.kind: cls for cls in (CoralReef, Shipwreck, SeaMine, Jellyfish, EmpJellyfish, RadiationBarrel)}
 
 
 class ReefSegment(pygame.sprite.Sprite):

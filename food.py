@@ -7,7 +7,12 @@ import random
 import math
 
 
+EYE_X, EYE_Y = 4, 6
+
+
 class SmallFish(pygame.sprite.Sprite):
+	bite = 0  # Energy lost by eating it instead of gained
+
 	def __init__(self, x, y):
 		super().__init__()
 
@@ -80,3 +85,20 @@ class SmallFish(pygame.sprite.Sprite):
 			self.frame_timer = 0
 			self.frame_index = (self.frame_index + 1) % 4
 			self.image = self.frames[self.frame_index]
+
+
+class ZombieFish(SmallFish):
+	"""Grey, with crosses for eyes. It looks like dinner, but it bites back."""
+	bite = 15
+
+	def __init__(self, x, y):
+		super().__init__(x, y)
+		self._colors = [(112, 122, 112), (150, 160, 148), (82, 90, 84)]
+		self.frames = [self._dead_eye(self._make_frame(i)) for i in range(4)]
+		self.image = self.frames[0]
+
+	@staticmethod
+	def _dead_eye(surf):
+		for dx, dy in ((-2, -2), (-1, -1), (0, 0), (1, 1), (2, 2), (-2, 2), (-1, 1), (1, -1), (2, -2)):
+			surf.set_at((EYE_X + dx, EYE_Y + dy), (240, 40, 40))
+		return surf

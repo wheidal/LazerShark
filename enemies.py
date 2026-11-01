@@ -379,7 +379,54 @@ class EvilSub(Enemy):
         self.move_to_pos()
 
 
-ENEMY_TYPES = {cls.kind: cls for cls in (KamikazeTuna, LaserManta, Barracuda, EvilSub)}
+def _piranha_art():
+    art = pygame.Surface((22, 30), pygame.SRCALPHA)
+    pygame.draw.polygon(art, (60, 150, 60), [(11, 22), (3, 30), (19, 30)])
+    pygame.draw.ellipse(art, (90, 220, 80), (2, 0, 18, 25))
+    pygame.draw.ellipse(art, (190, 255, 120), (7, 4, 8, 16))
+    pygame.draw.circle(art, (250, 60, 40), (7, 6), 2)
+    pygame.draw.circle(art, (250, 60, 40), (15, 6), 2)
+    for x in (7, 11, 15):
+        pygame.draw.line(art, (255, 255, 235), (x, 0), (x, 3), 1)
+    return _finish(art)
+
+
+class RadioactivePiranha(Enemy):
+    """A chasing swarm. Killing one leaves a little radiation, so do it at a distance."""
+    WIDTH, HEIGHT = 150, 80
+    kind = 'piranha'
+    name = "Radioactive Piranha"
+    min_score = 30
+    damage = 6
+    reward = 1
+    debris_color = (150, 255, 90)
+    leaves_cloud = True
+    CHASE_SPEED = 3.3
+    CHASE_STEPS = 420
+    LEAVE_SPEED = 4
+
+    def __init__(self, x, y, shark_rect):
+        super().__init__(x, y, shark_rect, _cached('piranha', _piranha_art))
+        self.offset = pygame.math.Vector2(random.randint(-34, 34), random.randint(-34, 34))
+        self.base = self.image
+
+    def update(self):
+        self.age += 1
+        if self.age > self.CHASE_STEPS:
+            self.pos.y += self.LEAVE_SPEED
+        else:
+            to_shark = pygame.math.Vector2(self.shark_rect.center) + self.offset - self.pos
+            if to_shark.length() > 2:
+                self.pos += to_shark.normalize() * self.CHASE_SPEED
+        self.move_to_pos()
+
+    @classmethod
+    def create(cls, x, shark_rect):
+        return [cls(x + random.randint(-50, 50), -random.randint(30, cls.HEIGHT), shark_rect)
+                for _ in range(random.randint(4, 6))]
+
+
+ENEMY_TYPES = {cls.kind: cls for cls in (KamikazeTuna, LaserManta, Barracuda, EvilSub, RadioactivePiranha)}
 
 
 def choose_enemy(kinds, score):

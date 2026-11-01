@@ -12,19 +12,19 @@ from coral import ART_OVERHANG, lerp_color, paint_reef, scatter_pieces
 ZONES = {
     'lagoon': {'width': (500, 600), 'length': (1500, 2500), 'bend': (400, 800),
                'next': ['pass'], 'decor': ['brain', 'staghorn', 'anemone'],
-               'obstacles': ['coral', 'coral', 'coral', 'wreck', 'jellyfish'],
-               'enemies': ['tuna', 'tuna', 'manta', 'barracuda'],
+               'obstacles': ['coral', 'coral', 'coral', 'wreck', 'jellyfish', 'barrel'], 'whirlpools': True,
+               'enemies': ['tuna', 'tuna', 'manta', 'barracuda', 'piranha'],
                # Reef colours, from the water's edge out to the deepest, furthest part
                'reef': [(216, 196, 148), (178, 132, 106), (126, 104, 108), (72, 90, 114), (42, 68, 102)]},
     'pass': {'width': (380, 460), 'length': (900, 1600), 'bend': (240, 520),
              'next': ['lagoon', 'dropoff'], 'decor': ['table', 'fan', 'brain', 'staghorn'],
-             'obstacles': ['coral', 'coral', 'mine', 'mine', 'jellyfish'],
-             'enemies': ['tuna', 'tuna', 'barracuda'],
+             'obstacles': ['coral', 'coral', 'mine', 'mine', 'jellyfish', 'emp_jelly', 'barrel'],
+             'enemies': ['tuna', 'tuna', 'barracuda', 'piranha'],
              'reef': [(150, 158, 150), (120, 84, 112), (86, 74, 106), (54, 66, 98), (34, 50, 84)]},
     'dropoff': {'width': (560, 620), 'length': (1000, 1800), 'bend': (400, 800),
                 'next': ['pass'], 'decor': ['fan', 'table'], 'open_side': True,
-                'obstacles': ['wreck', 'wreck', 'mine', 'jellyfish', 'jellyfish'],
-                'enemies': ['tuna', 'manta', 'manta', 'evil_sub'],
+                'obstacles': ['wreck', 'wreck', 'mine', 'jellyfish', 'emp_jelly', 'emp_jelly', 'barrel'], 'whirlpools': True,
+                'enemies': ['tuna', 'manta', 'manta', 'evil_sub', 'piranha'],
                 'reef': [(92, 120, 138), (58, 76, 106), (40, 54, 88), (28, 40, 72), (18, 28, 56)]},
     # Only reached through enter_arena, for a boss fight
     'arena': {'width': (650, 650), 'length': (0, 0), 'bend': (500, 800),
@@ -296,6 +296,9 @@ class ChannelDirector:
 
     def obstacle_kinds(self):
         return ZONES[self.zone]['obstacles']
+
+    def has_whirlpools(self):
+        return ZONES[self.zone].get('whirlpools', False)
 
     def enemy_kinds(self):
         return ZONES[self.zone]['enemies']
