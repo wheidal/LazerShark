@@ -981,7 +981,7 @@ def main():
 
             # A charging tuna blows up on the coast too
             for sprite in obstacles.sprites():
-                if sprite.bursts_on_coast and sprite.state == 'charge' and \
+                if sprite.bursts_on_coast and getattr(sprite, 'state', 'charge') == 'charge' and \
                         pygame.sprite.spritecollideany(sprite, banks, pixels_touch):
                     sprite.kill()
                     blown_up.append(sprite)
