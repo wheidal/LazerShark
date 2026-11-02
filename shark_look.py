@@ -151,12 +151,12 @@ class SharkLook:
         frame = self._frame(shark.image, kind)
         screen.blit(frame, frame.get_rect(center=shark.rect.center))
 
-    def draw_shield(self, screen, center, strength, now, dt=16):
+    def draw_shield(self, screen, center, strength, now, dt=16, fading=False):
         self._draw_shards(screen, dt)
         if strength <= 0:
             return
         color = shield_color(strength)
-        if strength >= FLICKER_BELOW or now // FLICKER_MS % 2 == 0:
+        if (strength >= FLICKER_BELOW and not fading) or now // FLICKER_MS % 2 == 0:
             if color not in self.bubbles:
                 self.bubbles[color] = _bubble(color)
             screen.blit(self.bubbles[color], self.bubbles[color].get_rect(center=center))

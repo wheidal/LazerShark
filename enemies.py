@@ -70,18 +70,24 @@ class Enemy(pygame.sprite.Sprite):
     def draw_warning(self, screen):
         pass
 
+    def nudge(self, dx):
+        self.pos.x += dx
+
+    def _would_touch(self, bank, dx, dy):
+        offset = (bank.rect.x - self.rect.x - dx, bank.rect.y - self.rect.y - dy)
+        return self.mask.overlap(bank.mask, offset) is not None
+
     def steer_clear_of(self, banks):
-        """Slower swimmers would otherwise end up over the reef as the coast scrolls past."""
+        """Swim for open water when the coast, or a wreck, is about to get in the way."""
         if not self.steers:
             return
+        ahead = self.rect.inflate(STEER_MARGIN * 2, STEER_LOOKAHEAD * 2)
         for bank in banks:
-            if bank.rect.top <= self.rect.bottom + STEER_LOOKAHEAD and bank.rect.bottom >= self.rect.top:
-                if bank.rect.left == 0 and self.rect.left < bank.rect.right + STEER_MARGIN:
-                    self.pos.x += STEER_SPEED
-                    return
-                if bank.rect.left > 0 and self.rect.right > bank.rect.left - STEER_MARGIN:
-                    self.pos.x -= STEER_SPEED
-                    return
+            if ahead.colliderect(bank.rect) and any(
+                    self._would_touch(bank, dx, dy) for dx in (-STEER_MARGIN, 0, STEER_MARGIN)
+                    for dy in (0, STEER_LOOKAHEAD)):
+                self.nudge(STEER_SPEED if bank.escape_x(self.rect.centerx) > self.rect.centerx else -STEER_SPEED)
+                return
 
     @classmethod
     def create(cls, x, shark_rect):
@@ -126,6 +132,10 @@ class KamikazeTuna(Enemy):
         self.state = 'enter'
         self.timer = 0
         self.heading = pygame.math.Vector2(0, 1)
+
+    @property
+    def steers(self):
+        return self.state != 'charge'  # Once it commits, the coast can have it
 
     def _turned(self, lit):
         angle = round(self.heading.angle_to(pygame.math.Vector2(0, 1)) / 10) * 10
@@ -283,6 +293,7 @@ class Barracuda(Enemy):
     damage = 12
     reward = 1
     debris_color = (190, 205, 215)
+    steers = True
     SWIM_SPEED = 4.2
     WEAVE = 32
     WEAVE_SPEED = 0.05
@@ -291,6 +302,9 @@ class Barracuda(Enemy):
         super().__init__(x, y, shark_rect, _cached('barracuda', _barracuda_art))
         self.home_x = x
         self.age = phase
+
+    def nudge(self, dx):
+        self.home_x += dx
 
     def update(self):
         self.age += 1
@@ -324,6 +338,7 @@ class EnemyTorpedo(Enemy):
     name = "Enemy Torpedo"
     damage = 18
     debris_color = (255, 140, 70)
+    bursts_on_coast = True
     SPEED = 4.5
 
     def __init__(self, x, y, shark_rect):
@@ -402,6 +417,7 @@ class RadioactivePiranha(Enemy):
     damage = 6
     reward = 1
     debris_color = (150, 255, 90)
+    steers = True
     leaves_cloud = True
     CHASE_SPEED = 3.3
     CHASE_STEPS = 420

@@ -22,7 +22,6 @@ CONTACT_INVULN_MS = 1000
 VICTORY_SCORE = 100
 LASER_DAMAGE = 1
 HEAD_LASER_DAMAGE = 2
-HEAVY_DAMAGE = 6  # Missiles and torpedoes
 ANGRY_AT = 0.5  # Share of health below which the eel attacks faster
 
 LUNGE_Y_RANGE = (110, 430)  # Always leaves room to get below it
@@ -121,6 +120,7 @@ class Boss:
     hint = None  # How to beat it, shown as the fight starts
     health_scale = 1
     arena_reef = None  # Colours for this boss's arena, if it has its own
+    final = False  # Beating this one ends the game
 
     def __init__(self, left_edge, right_edge, difficulty=DEFAULT_DIFFICULTY):
         ranges = DIFFICULTIES.get(difficulty, DIFFICULTIES[DEFAULT_DIFFICULTY])
@@ -166,12 +166,12 @@ class Boss:
     def step(self, shark_rect):
         raise NotImplementedError
 
-    def on_shot(self, parts, heavy):
-        """A shot landed on these parts. heavy means a missile or torpedo, not a laser."""
+    def on_shot(self, parts):
+        """A shot landed on these parts."""
         raise NotImplementedError
 
     def targets(self):
-        """What a torpedo can home in on."""
+        """What to aim at right now."""
         return []
 
     def touching(self, shark, collided):
@@ -258,11 +258,8 @@ class MorayEel(Boss):
             part.show(part.frames, (x, self.y + ripple), flash)
             self.parts.add(part)
 
-    def on_shot(self, parts, heavy):
-        if heavy:
-            self.hurt(HEAVY_DAMAGE)
-        else:
-            self.hurt(HEAD_LASER_DAMAGE if self.head in parts else LASER_DAMAGE)
+    def on_shot(self, parts):
+        self.hurt(HEAD_LASER_DAMAGE if self.head in parts else LASER_DAMAGE)
 
     def targets(self):
         return [self.head] if self.head.alive() else []

@@ -76,8 +76,6 @@ Simply run LazerSharkKillKill.exe to start the game!
 ## Controls
 - Arrow Keys: Move
 - Space: Fire Laser
-- Left Alt: Fire Missile
-- Left Ctrl: Fire Torpedo
 - P: Pause
 - Escape: Quit
 

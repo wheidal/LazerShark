@@ -14,9 +14,9 @@ from obstacle import EmpJellyfish, OBSTACLE_TYPES, RadiationBarrel
 from player import Shark
 from player_enhanced import SharkWithSprites
 from shark_look import SharkLook
-from powerup import LaserPowerup, MissilePowerup, ShieldPowerup, TorpedoPowerup
+from powerup import LaserPowerup, ShieldPowerup
 from projectile import Laser
-from weapons import weapon_icon
+from weapons import BASE, upgrade_icon, weapon_swatch
 
 SPAWN_STEPS = 80
 FISH_CHANCE = 0.35
@@ -159,7 +159,7 @@ class AttractMode:
         if now // BLINK_MS % 2 == 0:
             prompt = _outlined(self.font, "PRESS ANY KEY TO START", PROMPT_COLOR, (0, 0, 0), 2)
             screen.blit(prompt, prompt.get_rect(center=(400, 400)))
-        hint = _outlined(self.small, "S: SETTINGS   1-5: JUMP TO A BOSS   F11: FULL SCREEN   ESC: QUIT", (225, 235, 240), (0, 0, 0), 2)
+        hint = _outlined(self.small, "S: SETTINGS   1-6: JUMP TO A BOSS   F11: FULL SCREEN   ESC: QUIT", (225, 235, 240), (0, 0, 0), 2)
         screen.blit(hint, hint.get_rect(center=(400, 565)))
 
 
@@ -168,17 +168,17 @@ def _power_up_rows():
     return [
         (fish, "Fish", "+20 energy. You burn energy just by swimming, so keep eating"),
         (LaserPowerup(0, 0).image, "Laser cell", "+30 laser power. The laser also recharges slowly"),
-        (MissilePowerup(0, 0).image, "Missiles", "+2 missiles (hold 3). Blow up anything in one hit"),
-        (TorpedoPowerup(0, 0).image, "Torpedo", "+1 torpedo (hold 3). Homes in on the nearest target"),
-        (ShieldPowerup(0, 0).image, "Shield", "Takes damage in place of your energy until it breaks"),
+        (ShieldPowerup(0, 0).image, "Shield", "Takes damage in place of your energy, for up to 20 seconds"),
     ]
 
 
 def _weapon_rows():
     return [
-        (weapon_icon('fan'), "Fan laser", "A wide spread of shots. Great against swarms"),
-        (weapon_icon('chum'), "Chum Cannon", "Sprays red plasma balls across a huge 116-degree arc"),
-        (weapon_icon('rapid'), "Rapid laser", "Fires much faster, and empties your laser much faster"),
+        (upgrade_icon(), "Upgrade", "Each one moves you up to the next weapon below"),
+        (weapon_swatch(BASE), "1. Laser", "Your starting weapon: straight and reliable"),
+        (weapon_swatch('shotgun'), "2. Shotgun", "Sprays red plasma balls across a huge arc"),
+        (weapon_swatch('rapid'), "3. Rapid laser", "Fires much faster, and empties your laser much faster"),
+        (weapon_swatch('fan'), "4. Fan laser", "A wide spread of shots, and the best of the lot"),
     ]
 
 
@@ -206,8 +206,8 @@ class Briefing:
             (_outlined(title_font, "POWER-UPS", PROMPT_COLOR, (0, 0, 0), 2), _power_up_rows(),
              ["Watch for the tuna's flashing charge and the manta's red aiming line!"]),
             (_outlined(title_font, "WEAPONS", PROMPT_COLOR, (0, 0, 0), 2), _weapon_rows(),
-             ["Grab the same letter to power up, to level 3. A new letter swaps weapon.",
-              "Taking a hit costs a level. Destroying 5 obstacles earns one."]),
+             ["Each upgrade lasts 25 seconds. A hit also drops you back one weapon.",
+              "Destroying 10 obstacles earns an upgrade."]),
             (_outlined(title_font, "HAZARDS", PROMPT_COLOR, (0, 0, 0), 2), _hazard_rows(), []),
         ]
         self.page = 0
@@ -242,8 +242,7 @@ class Briefing:
             screen.blit(self.name_font.render(name, True, (255, 255, 255)), (135, y))
             screen.blit(self.text_font.render(text, True, (190, 215, 230)), (135, y + 24))
             y += 58
-        controls = (f"{self._key('fire')}: laser     {self._key('missile')}: missile     "
-                    f"{self._key('torpedo')}: torpedo     {self._key('pause')}: pause")
+        controls = f"{self._key('fire')}: laser     {self._key('pause')}: pause"
         for line in notes + [controls]:
             image = self.text_font.render(line, True, PROMPT_COLOR)
             screen.blit(image, image.get_rect(center=(400, y + 10)))

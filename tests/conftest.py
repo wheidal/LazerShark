@@ -56,13 +56,15 @@ def play(monkeypatch, tmp_path):
                 for key in pending:
                     press(key)
                 pending.clear()
+            elif state.get('in_story'):
+                press(pygame.K_a)
             elif state.get('splash'):
                 press(pygame.K_s if pending else pygame.K_a)
             elif 'briefing' in state and 'running' not in state:
                 press(pygame.K_a)
             elif 'running' in state:
                 if quiet:
-                    for timer in ('spawn_timer', 'powerup_timer', 'enemy_timer'):
+                    for timer in ('spawn_timer', 'powerup_timer', 'enemy_timer', 'upgrade_timer'):
                         state[timer] = 0
                 frame[0] += 1
                 if script(state, frame[0]) or frame[0] >= max_frames:

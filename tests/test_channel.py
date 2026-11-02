@@ -7,7 +7,7 @@ import pytest
 import channel as ch
 from enemies import Enemy
 from food import SmallFish
-from projectile import Laser, Missile, Torpedo
+from projectile import Laser
 
 needs_live_locals = pytest.mark.skipif(sys.version_info < (3, 13), reason='writes to frame locals')
 SHARK_TOP_Y = 493  # Lowest position: the shark stays at the bottom of its range
@@ -203,7 +203,7 @@ def test_hitting_a_bank_costs_energy_once_and_never_traps_shark(play):
 
 
 @needs_live_locals
-@pytest.mark.parametrize('weapon', [Laser, Missile, Torpedo])
+@pytest.mark.parametrize('weapon', [Laser])
 def test_coastline_survives_and_stops_every_weapon(play, weapon):
     seen = {}
 

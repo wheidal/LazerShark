@@ -7,7 +7,7 @@ import channel as ch
 from enemies import (ENEMY_LIMIT, ENEMY_SPAWN_MS, ENEMY_TYPES, Barracuda, Enemy, EnemyTorpedo, EvilSub, KamikazeTuna,
                      LaserManta, MantaBeam, choose_enemy)
 from obstacle import SeaMine
-from projectile import Laser, Missile
+from projectile import Laser
 
 SHARK = pygame.Rect(380, 450, 45, 104)
 
@@ -153,7 +153,7 @@ def test_a_shot_tuna_blast_clears_what_is_near_it(play):
         tuna = KamikazeTuna(400, 200, state['shark'].rect)
         neighbour['near'] = Barracuda(450, 200, state['shark'].rect)
         state['obstacles'].add(neighbour['near'])
-        state['projectiles'].add(Missile(tuna.rect.centerx, tuna.rect.bottom))
+        state['projectiles'].add(Laser(tuna.rect.centerx, tuna.rect.bottom + 8))
         return tuna
 
     enemy_scene(play, build)
@@ -247,3 +247,75 @@ def test_mines_are_never_laid_inside_the_reef(play, monkeypatch):
 
     play(script, quiet=False, max_frames=5000)
     assert seen['in_reef'] == 0
+
+
+def test_barracuda_steer_as_a_pack_without_losing_their_weave(display):
+    fish = Barracuda(290, 230, SHARK)
+    fish.rect.center = fish.pos
+    bank = ch.ChannelChunk([(300, 700, 'pass')] * 7).build(200)
+    start = fish.home_x
+    fish.steer_clear_of(bank)
+    assert fish.home_x > start
+
+
+def test_hovering_tuna_steers_but_a_charging_one_does_not(display):
+    tuna = KamikazeTuna(290, 230, SHARK)
+    tuna.rect.center = tuna.pos
+    bank = ch.ChannelChunk([(300, 700, 'pass')] * 7).build(200)
+    start = tuna.pos.x
+    tuna.steer_clear_of(bank)
+    assert tuna.pos.x > start
+    tuna.state = 'charge'
+    moved = tuna.pos.x
+    tuna.steer_clear_of(bank)
+    assert tuna.pos.x == moved
+
+
+def test_enemies_steer_around_a_wreck_not_always_left(display):
+    from giant_wreck import GiantWreck
+    wreck = GiantWreck(400)
+    wreck.rect.top = 200
+    right_side = LaserManta(wreck.rect.right - 10, 300, SHARK)
+    right_side.rect.center = right_side.pos
+    start = right_side.pos.x
+    right_side.steer_clear_of([wreck])
+    assert right_side.pos.x > start
+
+
+def test_enemy_torpedo_bursts_on_the_coast(play):
+    seen = {}
+
+    def script(state, frame):
+        state['energy'] = 100
+        if frame == 1:
+            torpedo = EnemyTorpedo(400, 300, state['shark'].rect)
+            torpedo.velocity = pygame.math.Vector2(11, 0)
+            seen['torpedo'] = torpedo
+            state['obstacles'].add(torpedo)
+        if not seen['torpedo'].alive():
+            seen['x'] = seen['torpedo'].rect.centerx
+            return True
+
+    play(script, max_frames=200)
+    assert seen['x'] < 790
+
+
+def test_steering_keeps_enemies_off_the_reef_in_play(play, monkeypatch):
+    for zone in ('lagoon', 'pass', 'dropoff'):
+        monkeypatch.setitem(ch.ZONES[zone], 'enemies', ['barracuda', 'piranha', 'manta', 'evil_sub'])
+    seen = {'on': 0, 'total': 0}
+
+    def script(state, frame):
+        state['energy'] = 100
+        if frame == 1:
+            state['score'] = 100
+            state['next_boss'] = 5  # No boss to interrupt the run
+        for sprite in state['obstacles']:
+            if isinstance(sprite, Enemy):
+                seen['total'] += 1
+                seen['on'] += bool(pygame.sprite.spritecollideany(sprite, state['banks'], pygame.sprite.collide_mask))
+        return frame >= 3000
+
+    play(script, quiet=False, max_frames=3000)
+    assert seen['total'] > 1000
+    assert seen['on'] / seen['total'] < 0.01

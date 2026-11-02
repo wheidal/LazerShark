@@ -35,8 +35,6 @@ class SettingsManager:
                 'up': pygame.K_UP,
                 'down': pygame.K_DOWN,
                 'fire': pygame.K_SPACE,
-                'missile': pygame.K_LALT,
-                'torpedo': pygame.K_LCTRL,
                 'pause': pygame.K_p,
                 'quit': pygame.K_ESCAPE
             }
@@ -53,8 +51,10 @@ class SettingsManager:
                     settings = self.default_settings.copy()
                     if 'keymap' in loaded_settings:
                         merged_keymap = self.default_settings['keymap'].copy()
+                        # Actions no longer in the game are left behind
                         merged_keymap.update({action: LEGACY_KEYS.get(key, key)
-                                              for action, key in loaded_settings['keymap'].items()})
+                                              for action, key in loaded_settings['keymap'].items()
+                                              if action in merged_keymap})
                         loaded_settings = dict(loaded_settings)
                         loaded_settings['keymap'] = merged_keymap
                     settings.update(loaded_settings)

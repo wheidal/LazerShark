@@ -22,7 +22,7 @@ def test_demo_plays_itself_for_a_long_time_and_stays_in_the_channel(display):
 
 
 def test_briefing_finishes_by_itself(display):
-    briefing = Briefing(display, {action: pygame.K_a for action in ('fire', 'missile', 'torpedo', 'pause')})
+    briefing = Briefing(display, {action: pygame.K_a for action in ('fire', 'pause')})
     assert not briefing.finished
     for _ in briefing.pages:
         briefing.draw(BRIEFING_MS)

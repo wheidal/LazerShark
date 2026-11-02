@@ -12,7 +12,7 @@ from obstacle import CoralReef
 from player import Shark
 from player_enhanced import SharkWithSprites
 from powerup import ShieldPowerup
-from projectile import Missile
+from projectile import Laser
 from resources import resource_path
 import settings_manager
 
@@ -45,7 +45,7 @@ def test_default_keys_use_pygame_2_codes(monkeypatch, tmp_path):
     monkeypatch.setattr(settings_manager, 'settings_path', lambda name: str(tmp_path / name))
     keymap = settings_manager.SettingsManager().get('keymap')
     assert keymap['left'] == pygame.K_LEFT
-    assert keymap['missile'] == pygame.K_LALT
+    assert 'missile' not in keymap and 'torpedo' not in keymap
 
 
 def test_old_saved_keys_are_converted(monkeypatch, tmp_path):
@@ -96,7 +96,8 @@ def test_shield_drop_survives_kills_while_shield_is_active(play):
             state['destroyed_counts'] = {'Coral Reef': 5}
             coral = CoralReef(400, 200)
             state['obstacles'].add(coral)
-            state['projectiles'].add(Missile(coral.rect.centerx, coral.rect.bottom))
+            coral.hits = coral.toughness - 1
+            state['projectiles'].add(Laser(coral.rect.centerx, coral.rect.bottom))
         seen['drops'] = sum(isinstance(p, ShieldPowerup) for p in state['powerups'])
         return frame >= 4
 

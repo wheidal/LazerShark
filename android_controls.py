@@ -33,18 +33,6 @@ class AndroidTouchControls:
                 'label': 'L',
                 'radius': self.button_size
             },
-            'missile': {
-                'pos': (base_x - self.button_spacing, base_y),
-                'color': (255, 165, 0),
-                'label': 'M',
-                'radius': self.button_size - 10
-            },
-            'torpedo': {
-                'pos': (base_x + self.button_spacing, base_y),
-                'color': (0, 100, 255),
-                'label': 'T',
-                'radius': self.button_size - 10
-            },
             'pause': {
                 'pos': (screen_width - 50, 50),
                 'color': (128, 128, 128),
@@ -207,8 +195,6 @@ class AndroidTouchControls:
         return {
             'movement': self.get_movement(),
             'fire_laser': self.is_button_pressed('laser'),
-            'fire_missile': self.is_button_pressed('missile'),
-            'fire_torpedo': self.is_button_pressed('torpedo'),
             'pause': self.is_button_pressed('pause')
         }
 
@@ -234,8 +220,6 @@ class AndroidAdapter:
         self.prev_button_states = self.current_button_states.copy()
         self.current_button_states = {
             'laser': self.controls.is_button_pressed('laser'),
-            'missile': self.controls.is_button_pressed('missile'),
-            'torpedo': self.controls.is_button_pressed('torpedo'),
             'pause': self.controls.is_button_pressed('pause')
         }
     
