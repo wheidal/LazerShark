@@ -11,7 +11,8 @@ from resources import resource_path
 FADE_MS = 700
 FALLBACK = resource_path('sounds', 'shark.wav')
 AREA_TRACKS = {"The Reef": 'reef', "The Ship Graveyard": 'graveyard', "The Volcanic Rift": 'rift',
-               "Atlantis": 'atlantis', "The Sunken Lab": 'lab', "The Lab Core": 'core'}
+               "Atlantis": 'atlantis', "The Sunken Lab": 'lab', "The Lab Core": 'core',
+               "The Flooded City": 'graveyard', "The NASA Graveyard": 'lab'}
 
 
 def _path_for(track):

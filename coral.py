@@ -193,7 +193,44 @@ def _ruin(rng):
     return image
 
 
-PIECE_MAKERS = {'brain': _brain, 'staghorn': _staghorn, 'table': _table, 'fan': _fan, 'anemone': _anemone,
+def _car(rng):
+    image = pygame.Surface((26, 44), pygame.SRCALPHA)
+    color = rng.choice([(170, 60, 50), (60, 90, 150), (190, 170, 70), (110, 116, 120)])
+    pygame.draw.rect(image, shade(color, 0.6), (1, 1, 24, 42), border_radius=6)
+    pygame.draw.rect(image, color, (3, 3, 20, 38), border_radius=5)
+    pygame.draw.rect(image, (40, 60, 80), (6, 11, 14, 8))
+    pygame.draw.rect(image, (40, 60, 80), (6, 26, 14, 6))
+    return image
+
+
+def _windows(rng):
+    image = pygame.Surface((40, 36), pygame.SRCALPHA)
+    pygame.draw.rect(image, (92, 96, 104), (0, 0, 40, 36), border_radius=2)
+    for x in (4, 16, 28):
+        for y in (5, 20):
+            pygame.draw.rect(image, rng.choice([(34, 46, 62), (235, 210, 110)]), (x, y, 8, 11))
+    return image
+
+
+def _solar_panel(rng):
+    image = pygame.Surface((40, 28), pygame.SRCALPHA)
+    pygame.draw.rect(image, (36, 62, 120), (0, 0, 40, 28))
+    for x in range(0, 41, 8):
+        pygame.draw.line(image, (120, 170, 220), (x, 0), (x, 27))
+    for y in range(0, 29, 9):
+        pygame.draw.line(image, (120, 170, 220), (0, y), (39, y))
+    return image
+
+
+def _capsule(rng):
+    image = pygame.Surface((34, 40), pygame.SRCALPHA)
+    pygame.draw.polygon(image, (170, 170, 176), [(17, 1), (33, 34), (1, 34)])
+    pygame.draw.rect(image, (92, 62, 44), (1, 33, 32, 6))
+    pygame.draw.circle(image, (60, 120, 170), (17, 21), 5)
+    return image
+
+
+PIECE_MAKERS = {'car': _car, 'windows': _windows, 'solar_panel': _solar_panel, 'capsule': _capsule, 'brain': _brain, 'staghorn': _staghorn, 'table': _table, 'fan': _fan, 'anemone': _anemone,
                 'anchor': _anchor, 'hull_plate': _hull_plate, 'ribs': _ribs, 'lava_rock': _lava_rock,
                 'lava_crack': _lava_crack, 'pipe': _pipe, 'tank': _tank, 'column': _column, 'ruin': _ruin}
 

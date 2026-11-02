@@ -124,6 +124,7 @@ def scene(play, area_index, script_step, frames=9000):
 
     def script(state, frame):
         if frame == 1:
+            state['next_boss'] = area_index
             state['channel'].set_area(AREAS[area_index])
         return script_step(state, frame, seen)
 

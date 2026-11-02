@@ -310,7 +310,7 @@ def test_steering_keeps_enemies_off_the_reef_in_play(play, monkeypatch):
         state['energy'] = 100
         if frame == 1:
             state['score'] = 100
-            state['next_boss'] = 5  # No boss to interrupt the run
+            state['next_boss'] = 9  # No boss to interrupt the run, and it stays in the Reef
         for sprite in state['obstacles']:
             if isinstance(sprite, Enemy):
                 seen['total'] += 1
@@ -354,12 +354,12 @@ def test_spawned_enemies_in_a_later_area_are_tougher_in_play(play):
         state['energy'] = 100
         if frame == 1:
             state['next_boss'] = 5
-            state['channel'].set_area(state['channel'].area)
-            state['score'] = 0
+            state['score'] = 100
         for sprite in state['obstacles']:
-            if isinstance(sprite, KamikazeTuna):
+            if isinstance(sprite, Enemy) and sprite.kind in ('manta', 'evil_sub', 'statue', 'angler', 'hammerhead'):
                 seen['toughness'] = sprite.toughness
+                seen['base'] = type(sprite).toughness
                 return True
 
     play(script, quiet=False, max_frames=20000)
-    assert seen['toughness'] > KamikazeTuna.toughness
+    assert seen['toughness'] > seen['base']

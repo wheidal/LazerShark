@@ -9,8 +9,7 @@ from channel import ChannelDirector, SCROLL_PER_STEP
 from enemies import RadioactivePiranha
 from food import SmallFish, ZombieFish
 from graphics_enhancements import ParticleEffects
-from hazards import _whirlpool_art
-from obstacle import EmpJellyfish, OBSTACLE_TYPES, RadiationBarrel, SeaMine
+from obstacle import EmpJellyfish, OBSTACLE_TYPES, FishingNet, RadiationBarrel, SeaMine
 from player import Shark
 from player_enhanced import SharkWithSprites
 from shark_look import SharkLook
@@ -183,8 +182,6 @@ def _weapon_rows():
 
 
 def _hazard_rows():
-    whirlpool = pygame.transform.smoothscale(_whirlpool_art()[0], (40, 40))
-    whirlpool.fill((80, 90, 100), special_flags=pygame.BLEND_RGB_ADD)  # Stands out on the dark panel
     shark_rect = pygame.Rect(0, 0, 1, 1)
     return [
         (SeaMine(0, 0).image, "Sea mine", "Goes off when you get close. Shoot it from far away, or steer clear"),
@@ -192,7 +189,7 @@ def _hazard_rows():
         (RadioactivePiranha(0, 0, shark_rect).image, "Radioactive piranha", "They chase you, and leave radiation behind when killed"),
         (ZombieFish(0, 0).image, "Zombie fish", "Grey with red crosses for eyes. Don't eat it: it bites!"),
         (EmpJellyfish(0, 0).image, "EMP jellyfish", "Its sting knocks out your laser for 2 seconds"),
-        (whirlpool, "Whirlpool", "Drags you in, and its core hurts. Swim hard to escape"),
+        (FishingNet(0, 0).image, "Fishing net", "Tangles you for a moment. Shoot it away"),
     ]
 
 
@@ -205,7 +202,7 @@ class Briefing:
         title_font = pygame.font.SysFont(None, 56)
         self.pages = [
             (_outlined(title_font, "POWER-UPS", PROMPT_COLOR, (0, 0, 0), 2), _power_up_rows(),
-             ["Watch for the tuna's flashing charge and the manta's red aiming line!"]),
+             ["Watch for red warning lines: something is about to fire or charge!"]),
             (_outlined(title_font, "WEAPONS", PROMPT_COLOR, (0, 0, 0), 2), _weapon_rows(),
              ["Each upgrade lasts 25 seconds. A hit also drops you back one weapon.",
               "Destroying 10 obstacles earns an upgrade."]),

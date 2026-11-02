@@ -13,23 +13,25 @@ from coral import ART_OVERHANG, lerp_color, paint_reef, scatter_pieces
 ZONES = {
     'lagoon': {'width': (500, 600), 'length': (1500, 2500), 'bend': (400, 800),
                'next': ['pass'], 'decor': ['brain', 'staghorn', 'anemone'],
-               'obstacles': ['coral', 'coral', 'coral', 'wreck', 'jellyfish', 'barrel'], 'whirlpools': True,
-               'enemies': ['tuna', 'tuna', 'manta', 'barracuda', 'piranha'],
+               'obstacles': ['coral', 'coral', 'coral', 'wreck', 'jellyfish', 'barrel', 'net'], 'whirlpools': True,
+               'enemies': ['tuna', 'tuna', 'manta', 'barracuda', 'piranha', 'puffer'],
+               'fields': ['ink'],
                # Reef colours, from the water's edge out to the deepest, furthest part
                'reef': [(216, 196, 148), (178, 132, 106), (126, 104, 108), (72, 90, 114), (42, 68, 102)]},
     'pass': {'width': (380, 460), 'length': (900, 1600), 'bend': (240, 520),
              'next': ['lagoon', 'dropoff'], 'decor': ['table', 'fan', 'brain', 'staghorn'],
-             'obstacles': ['coral', 'coral', 'mine', 'mine', 'jellyfish', 'emp_jelly', 'barrel'],
-             'enemies': ['tuna', 'tuna', 'barracuda', 'piranha'],
+             'obstacles': ['coral', 'coral', 'mine', 'mine', 'jellyfish', 'emp_jelly', 'barrel', 'boulder'],
+             'enemies': ['tuna', 'tuna', 'barracuda', 'piranha', 'puffer'],
              'reef': [(150, 158, 150), (120, 84, 112), (86, 74, 106), (54, 66, 98), (34, 50, 84)]},
     'dropoff': {'width': (560, 620), 'length': (1000, 1800), 'bend': (400, 800),
                 'next': ['pass'], 'decor': ['fan', 'table'], 'open_side': True,
-                'obstacles': ['wreck', 'wreck', 'mine', 'jellyfish', 'emp_jelly', 'emp_jelly', 'barrel'], 'whirlpools': True,
-                'enemies': ['tuna', 'manta', 'manta', 'evil_sub', 'piranha'],
+                'obstacles': ['wreck', 'wreck', 'mine', 'jellyfish', 'emp_jelly', 'emp_jelly', 'barrel', 'tumbling_rock'],
+                'whirlpools': True, 'fields': ['ink', 'sludge'],
+                'enemies': ['tuna', 'manta', 'manta', 'evil_sub', 'piranha', 'angler', 'hammerhead'],
                 'reef': [(92, 120, 138), (58, 76, 106), (40, 54, 88), (28, 40, 72), (18, 28, 56)]},
     # Only reached through enter_arena, for a boss fight
     'arena': {'width': (650, 650), 'length': (0, 0), 'bend': (500, 800),
-              'next': ['lagoon'], 'decor': ['brain', 'fan', 'table'], 'obstacles': [], 'enemies': [],
+              'next': ['lagoon'], 'decor': ['brain', 'fan', 'table'], 'obstacles': [], 'enemies': [], 'fields': [],
               'reef': [(120, 130, 124), (92, 70, 92), (66, 58, 84), (42, 50, 78), (24, 34, 62)]},
 }
 ROUTE_ZONES = set(ZONES) - {'arena'}
@@ -40,6 +42,7 @@ COAST_ROUGHNESS = 4  # px the coastline wanders from its smooth line
 BANK_DAMAGE = 12
 BANK_INVULN_MS = 1000
 BANK_PUSH = 10  # px per step, faster than the shark can swim back
+WHIRLPOOLS_ON = False  # Switched off to see if the game is better without them. True brings them back
 ROUTE_SAFETY = 0.8  # Share of the theoretical limits a bend may use
 REEF_COLOR_BLEND = 0.12  # How far the reef's colours move towards the current zone's per chunk
 
@@ -348,7 +351,10 @@ class ChannelDirector:
         return self._area_value('obstacles')
 
     def has_whirlpools(self):
-        return self._area_value('whirlpools', False)
+        return WHIRLPOOLS_ON and self._area_value('whirlpools', False)
+
+    def field_kinds(self):
+        return self._area_value('fields', [])
 
     def enemy_kinds(self):
         return self._area_value('enemies')
