@@ -6,6 +6,7 @@ import random
 
 import pygame
 
+from areas import AREAS
 from coral import ART_OVERHANG, lerp_color, paint_reef, scatter_pieces
 
 # --- Tuning: adjust these while playtesting ---
@@ -48,6 +49,7 @@ SCREEN_H = 600
 EDGE_MARGIN = 30
 OPEN_SIDE_OVERHANG = (40, 80)  # How far an open side's bank sits off screen
 SPAWN_PADDING = 16
+GATE_OVERLAP = 14
 SPAWN_SAMPLES_BELOW = 8  # Coast samples a spawned sprite can overlap: tall obstacles reach below the top
 SPAWN_SAMPLES_ABOVE = 3  # Sprites start slightly above the top of the screen
 SCROLL_PER_STEP = 3
@@ -88,12 +90,15 @@ class ChannelGenerator:
         self.left_noise = 0
         self.right_noise = 0
         self.pending = []
+        self.lagoon_width = None  # What the current area wants instead
 
     def _zone_length(self):
         return self.rng.uniform(*ZONES[self.zone]['length'])
 
     def _width_range(self, score):
         low, high = ZONES[self.zone]['width']
+        if self.zone == 'lagoon' and self.lagoon_width:
+            return self.lagoon_width
         if self.zone == 'pass':
             narrowing = score * PASS_NARROWS_PER_SCORE
             low = max(NARROWEST_PASS, low - narrowing)
@@ -165,7 +170,7 @@ class ChannelGenerator:
 class CoastBank(pygame.sprite.Sprite):
     """A slice of indestructible coastline. Knows the channel's centre, to push the shark there."""
 
-    def __init__(self, edges, is_left, channel_center, zone, y, world_y, colors, rng=random):
+    def __init__(self, edges, is_left, channel_center, zone, y, world_y, colors, rng=random, decor=None):
         """edges holds this bank's x position at each sample, from the chunk's bottom to its top."""
         super().__init__()
         y_at = [CHUNK_H - i * SAMPLE_SPACING for i in range(len(edges))]
@@ -181,18 +186,22 @@ class CoastBank(pygame.sprite.Sprite):
                             coast + [(outer_x, y_at[-1]), (outer_x, y_at[0])])
         self.mask = pygame.mask.from_surface(hit_shape)
         paint_reef(self.image, edges, is_left, x_offset, world_y, colors[0], colors[1], CHUNK_H)
-        scatter_pieces(self.image, edges, is_left, x_offset, ZONES[zone]['decor'], rng, CHUNK_H)
+        scatter_pieces(self.image, edges, is_left, x_offset, decor or ZONES[zone]['decor'], rng, CHUNK_H)
         self.rect = self.image.get_rect(topleft=(x_offset, y))
         self.channel_center = channel_center
+
+    def escape_x(self, shark_x):
+        return self.channel_center
 
 
 class ChannelChunk:
     """One screen-wide slice of the channel."""
 
-    def __init__(self, samples, rng=random, world_y=0, colors=None):
+    def __init__(self, samples, rng=random, world_y=0, colors=None, decor=None):
         self.samples = samples
         self.rng = rng
         self.world_y = world_y
+        self.decor = decor
         reef = ZONES[self.zone]['reef']
         self.colors = colors or (reef, reef)
 
@@ -212,15 +221,16 @@ class ChannelChunk:
         banks = []
         if max(lefts) > 0:
             banks.append(CoastBank(lefts, True, self.channel_center, self.zone, y,
-                                   self.world_y, self.colors, self.rng))
+                                   self.world_y, self.colors, self.rng, self.decor))
         if min(rights) < SCREEN_W:
             banks.append(CoastBank(rights, False, self.channel_center, self.zone, y,
-                                   self.world_y, self.colors, self.rng))
+                                   self.world_y, self.colors, self.rng, self.decor))
         return banks
 
 
 class ChannelDirector:
     """Hands out the coastline a chunk at a time and finds safe places to spawn things."""
+    WRECK_MIN_GAP = 125
 
     def __init__(self, rng=random):
         self.rng = rng
@@ -233,6 +243,8 @@ class ChannelDirector:
         self.reef_colors = ZONES['lagoon']['reef']
         self.arena_chunks = 0
         self.arena_reef = None
+        self.area = AREAS[0]
+        self.island = None  # (left, right, steps left) of a giant wreck still scrolling into view
 
     @property
     def zone(self):
@@ -255,9 +267,10 @@ class ChannelDirector:
         self.score = score
         self.recent = (self.recent + samples[1:])[-SPAWN_SAMPLES_BELOW:]
         previous = self.reef_colors
-        target = (self.zone == 'arena' and self.arena_reef) or ZONES[self.zone]['reef']
+        target = (self.zone == 'arena' and self.arena_reef) or self._area_value('reef')
         self.reef_colors = [lerp_color(now, goal, REEF_COLOR_BLEND) for now, goal in zip(previous, target)]
-        chunk = ChannelChunk(samples, self.rng, self.world_y, (previous, self.reef_colors))
+        chunk = ChannelChunk(samples, self.rng, self.world_y, (previous, self.reef_colors),
+                             self._area_value('decor'))
         self.world_y += CHUNK_H
         return chunk
 
@@ -271,10 +284,47 @@ class ChannelDirector:
     def update(self, score):
         """Advance one step. Returns a new ChannelChunk when one is due."""
         self.distance += SCROLL_PER_STEP
+        if self.island:
+            left, right, steps = self.island
+            self.island = (left, right, steps - 1) if steps > 1 else None
         if self.distance < CHUNK_H:
             return None
         self.distance -= CHUNK_H
         return self._next_chunk(score)
+
+    def set_area(self, area):
+        self.area = area
+        self.generator.lagoon_width = area.get('lagoon_width')
+
+    def _area_value(self, key, default=None):
+        """What the current area says about this, or else what the zone does. An arena has its own."""
+        zone = ZONES[self.zone] if self.last_sample else ZONES['lagoon']
+        if self.last_sample and self.zone == 'arena':
+            return zone.get(key, default)
+        return self.area.get(key, zone.get(key, default))
+
+    def wreck_spot(self, width, height):
+        """Where a giant wreck fits with open water on both sides, or None."""
+        if not self.area.get('giant_wrecks') or self.zone == 'arena' or self.island:
+            return None
+        window = self.recent + self.generator.peek(height // SAMPLE_SPACING + SPAWN_SAMPLES_ABOVE, self.score)
+        if any(sample[2] == 'arena' for sample in window):
+            return None
+        left = max(0, max(sample[0] for sample in window))
+        right = min(SCREEN_W, min(sample[1] for sample in window))
+        if right - left < width + 2 * self.WRECK_MIN_GAP:
+            return None
+        return (left + right) // 2
+
+    def gate_span(self):
+        """The channel's edges where a gate would start, reaching just under the coast on each side."""
+        window = self.recent[-2:] + self.generator.peek(2, self.score)
+        left = max(sample[0] for sample in window)
+        right = min(sample[1] for sample in window)
+        return max(0, left - GATE_OVERLAP), min(SCREEN_W, right + GATE_OVERLAP)
+
+    def block_for_wreck(self, left, right, height):
+        self.island = (left, right, height // SCROLL_PER_STEP)
 
     def enter_arena(self, reef=None):
         self.arena_reef = reef
@@ -295,13 +345,13 @@ class ChannelDirector:
         return left, right
 
     def obstacle_kinds(self):
-        return ZONES[self.zone]['obstacles']
+        return self._area_value('obstacles')
 
     def has_whirlpools(self):
-        return ZONES[self.zone].get('whirlpools', False)
+        return self._area_value('whirlpools', False)
 
     def enemy_kinds(self):
-        return ZONES[self.zone]['enemies']
+        return self._area_value('enemies')
 
     def spawn_x(self, width, blocking=False, height=0):
         """Pick an x inside the channel at the top of the screen.
@@ -314,6 +364,12 @@ class ChannelDirector:
         window = self.recent + self.generator.peek(ahead, self.score)
         left = max(0, max(sample[0] for sample in window))
         right = min(SCREEN_W, min(sample[1] for sample in window))
+        if self.island:  # Only the water beside the wreck is free
+            hull_left, hull_right, _ = self.island
+            if hull_left - left >= right - hull_right:
+                right = hull_left
+            else:
+                left = hull_right
         low = left + width // 2 + SPAWN_PADDING
         high = right - width // 2 - SPAWN_PADDING
         if blocking:
@@ -327,4 +383,6 @@ class ChannelDirector:
                     low = left + width // 2 + OBSTACLE_PASS_ROOM
         if low <= high:
             return self.rng.randint(low, high)
-        return None if blocking else (self.last_sample[0] + self.last_sample[1]) // 2
+        if blocking:
+            return None
+        return (left + right) // 2 if self.island else (self.last_sample[0] + self.last_sample[1]) // 2

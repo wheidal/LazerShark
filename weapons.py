@@ -16,7 +16,7 @@ OFF_SCREEN = pygame.Rect(-40, -60, 880, 720)
 # shots and spread (degrees either side of straight up). reach: px a bolt travels.
 WEAPONS = {
     'fan': {
-        'name': 'FAN', 'letter': 'F', 'color': (110, 240, 130), 'size': (6, 16), 'speed': 11, 'pierce': False,
+        'name': 'FAN', 'letter': 'F', 'color': (110, 240, 130), 'size': (6, 16), 'speed': 11,
         'levels': [
             {'cost': 4, 'cooldown': 0.16, 'power': 0.7, 'shots': 3, 'spread': 12, 'reach': 900},
             {'cost': 5, 'cooldown': 0.16, 'power': 0.7, 'shots': 5, 'spread': 20, 'reach': 900},
@@ -24,7 +24,7 @@ WEAPONS = {
         ],
     },
     'chum': {
-        'name': 'CHUM', 'letter': 'C', 'color': (255, 50, 40), 'size': (11, 11), 'speed': 10, 'pierce': False,
+        'name': 'CHUM', 'letter': 'C', 'color': (255, 50, 40), 'size': (11, 11), 'speed': 10,
         'ball': True,
         'levels': [
             {'cost': 8, 'cooldown': 0.45, 'power': 0.5, 'shots': 7, 'spread': 58, 'reach': 900},
@@ -33,19 +33,11 @@ WEAPONS = {
         ],
     },
     'rapid': {
-        'name': 'RAPID', 'letter': 'R', 'color': (255, 240, 90), 'size': (5, 16), 'speed': 15, 'pierce': False,
+        'name': 'RAPID', 'letter': 'R', 'color': (255, 240, 90), 'size': (5, 16), 'speed': 15,
         'levels': [
             {'cost': 2, 'cooldown': 0.06, 'power': 0.8, 'shots': 1, 'spread': 0, 'reach': 900},
             {'cost': 2, 'cooldown': 0.05, 'power': 0.9, 'shots': 1, 'spread': 0, 'reach': 900},
             {'cost': 2, 'cooldown': 0.04, 'power': 1.0, 'shots': 1, 'spread': 0, 'reach': 900},
-        ],
-    },
-    'beam': {
-        'name': 'BEAM', 'letter': 'B', 'color': (120, 210, 255), 'size': (12, 64), 'speed': 20, 'pierce': True,
-        'levels': [
-            {'cost': 12, 'cooldown': 0.55, 'power': 5, 'shots': 1, 'spread': 0, 'reach': 900},
-            {'cost': 12, 'cooldown': 0.45, 'power': 6, 'shots': 1, 'spread': 0, 'reach': 900},
-            {'cost': 12, 'cooldown': 0.35, 'power': 8, 'shots': 1, 'spread': 0, 'reach': 900},
         ],
     },
 }
@@ -76,7 +68,7 @@ def _bolt_image(kind, angle):
 
 
 class Bolt(Laser):
-    """A laser shot that can fly at an angle, run out of range, or pass through what it hits."""
+    """A laser shot that can fly at an angle and run out of range."""
 
     def __init__(self, x, y, kind, stats, angle=0):
         super().__init__(x, y)
@@ -87,7 +79,6 @@ class Bolt(Laser):
         radians = math.radians(angle)
         self.velocity = pygame.math.Vector2(math.sin(radians), -math.cos(radians)) * spec['speed']
         self.power = stats['power']
-        self.pierce = spec['pierce']
         self.reach = stats['reach']
 
     def update(self, *args, **kwargs):

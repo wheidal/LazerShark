@@ -6,7 +6,6 @@ import math
 
 class Laser(pygame.sprite.Sprite):
     power = 1  # Damage is multiplied by this
-    pierce = False  # Passes through what it hits, hurting each thing once
 
     def __init__(self, x, y):
         super().__init__()
@@ -27,7 +26,6 @@ class Laser(pygame.sprite.Sprite):
         
         self.rect = self.image.get_rect(midbottom=(x, y))
         self.speed = -12
-        self.already_hit = set()
         
     def update(self, *args, **kwargs):
         self.rect.y += self.speed

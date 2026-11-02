@@ -491,7 +491,15 @@ class GraphicsEnhancer:
         self.tint = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self.tint.fill((0, 20, 40, 30))
         self.vignette = ScreenEffects.build_vignette((self.width, self.height), 0.2)
+        self.area_tint = None
         
+    def set_area_tint(self, color):
+        """Give the water an area's colour, or None for plain ocean."""
+        self.area_tint = None
+        if color:
+            self.area_tint = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            self.area_tint.fill(color)
+
     def _build_background(self) -> pygame.Surface:
         """Create the gradient ocean background with depth fog"""
         background = pygame.Surface((self.width, self.height)).convert()
@@ -515,6 +523,8 @@ class GraphicsEnhancer:
     def render_background(self):
         """Render enhanced background"""
         self.screen.blit(self.background, (0, 0))
+        if self.area_tint:
+            self.screen.blit(self.area_tint, (0, 0))
         
         # Add background layers
         self.backgrounds.draw(self.screen)

@@ -118,6 +118,7 @@ class Hazard(pygame.sprite.Sprite):
 class Boss:
     name = "Boss"
     arrival = "Something stirs..."
+    hint = None  # How to beat it, shown as the fight starts
     health_scale = 1
     arena_reef = None  # Colours for this boss's arena, if it has its own
 
@@ -192,6 +193,7 @@ class Boss:
 class MorayEel(Boss):
     name = "GIANT MORAY"
     arrival = "Something stirs in the reef..."
+    hint = "Dodge below its lunge, then shoot up!"
 
     def __init__(self, left_edge, right_edge, difficulty=DEFAULT_DIFFICULTY):
         super().__init__(left_edge, right_edge, difficulty)

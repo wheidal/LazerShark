@@ -8,6 +8,8 @@ import random
 import pygame
 
 from boss import Hazard
+from bosses import Orb
+from channel import SCROLL_PER_STEP
 from obstacle import SeaMine, _finish
 
 # How often enemies arrive and how many may be about, by difficulty
@@ -426,7 +428,51 @@ class RadioactivePiranha(Enemy):
                 for _ in range(random.randint(4, 6))]
 
 
-ENEMY_TYPES = {cls.kind: cls for cls in (KamikazeTuna, LaserManta, Barracuda, EvilSub, RadioactivePiranha)}
+def _statue_art(lit):
+    art = pygame.Surface((62, 62), pygame.SRCALPHA)
+    pygame.draw.circle(art, (112, 104, 78), (31, 31), 30)
+    pygame.draw.circle(art, (196, 180, 126), (30, 30), 26)
+    pygame.draw.polygon(art, (228, 212, 158), [(31, 8), (48, 22), (42, 44), (20, 44), (14, 22)])
+    pygame.draw.line(art, (150, 136, 96), (31, 8), (31, 44), 2)
+    eye = (255, 90, 60) if lit else (90, 220, 255)
+    for x in (23, 39):
+        pygame.draw.circle(art, eye, (x, 40), 5)
+        pygame.draw.circle(art, (255, 255, 240), (x, 40), 2)
+    return _finish(art)
+
+
+class GuardianStatue(Enemy):
+    """Stands on the seabed as the channel scrolls by. Its eyes turn red just before it fires."""
+    WIDTH, HEIGHT = 70, 70
+    kind = 'statue'
+    name = "Guardian Statue"
+    toughness = 7
+    damage = 25
+    reward = 7
+    counts_for_rewards = True
+    debris_color = (214, 198, 140)
+    FIRE_STEPS = 85
+    WARN_STEPS = 30
+    SHOT_DAMAGE = 12
+
+    def __init__(self, x, y, shark_rect):
+        self.frames = [_cached(('statue', lit), lambda: _statue_art(lit)) for lit in (False, True)]
+        super().__init__(x, y, shark_rect, self.frames[0])
+
+    def update(self):
+        self.age += 1
+        self.pos.y += SCROLL_PER_STEP
+        into_cycle = self.age % self.FIRE_STEPS
+        self.set_image(self.frames[into_cycle > self.FIRE_STEPS - self.WARN_STEPS])
+        if into_cycle == 0 and self.pos.y > 0 and self.pos.y < self.shark_rect.top:  # Never fires from behind
+            shot = Orb((self.pos.x, self.pos.y + 34), self.shark_rect.center, (90, 220, 255), 4.5, 9)
+            shot.damage = self.SHOT_DAMAGE
+            self.new_shots.append(shot)
+        self.move_to_pos()
+
+
+ENEMY_TYPES = {cls.kind: cls for cls in (KamikazeTuna, LaserManta, Barracuda, EvilSub, RadioactivePiranha,
+                                         GuardianStatue)}
 
 
 def choose_enemy(kinds, score):

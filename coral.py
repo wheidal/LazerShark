@@ -103,7 +103,99 @@ def _anemone(rng):
     return image
 
 
-PIECE_MAKERS = {'brain': _brain, 'staghorn': _staghorn, 'table': _table, 'fan': _fan, 'anemone': _anemone}
+def _anchor(rng):
+    image = pygame.Surface((30, 40), pygame.SRCALPHA)
+    color = rng.choice([(120, 92, 70), (96, 92, 88), (140, 90, 56)])
+    pygame.draw.circle(image, color, (15, 5), 4, 2)
+    pygame.draw.line(image, color, (15, 8), (15, 34), 4)
+    pygame.draw.line(image, color, (6, 13), (24, 13), 3)
+    pygame.draw.arc(image, color, (2, 14, 26, 24), 3.3, 6.1, 4)
+    pygame.draw.polygon(image, color, [(0, 26), (7, 22), (6, 32)])
+    pygame.draw.polygon(image, color, [(30, 26), (23, 22), (24, 32)])
+    return image
+
+
+def _hull_plate(rng):
+    image = pygame.Surface((38, 28), pygame.SRCALPHA)
+    color = rng.choice([(104, 72, 58), (92, 88, 84), (122, 70, 44)])
+    pygame.draw.polygon(image, shade(color, 0.6), [(2, 6), (35, 1), (37, 22), (6, 27)])
+    pygame.draw.polygon(image, color, [(3, 6), (34, 2), (35, 20), (6, 25)])
+    for x, y in ((8, 9), (29, 6), (10, 21), (31, 18)):
+        pygame.draw.circle(image, shade(color, 1.4), (x, y), 1)
+    return image
+
+
+def _ribs(rng):
+    image = pygame.Surface((42, 34), pygame.SRCALPHA)
+    color = rng.choice([(130, 104, 76), (112, 92, 72)])
+    pygame.draw.line(image, shade(color, 0.7), (2, 17), (40, 17), 4)
+    for x in range(6, 40, 8):
+        pygame.draw.line(image, color, (x, 17), (x - 3, 2), 3)
+        pygame.draw.line(image, color, (x, 17), (x - 3, 32), 3)
+    return image
+
+
+def _lava_rock(rng):
+    image = pygame.Surface((36, 30), pygame.SRCALPHA)
+    pygame.draw.polygon(image, (40, 34, 38), [(2, 18), (10, 3), (26, 1), (35, 14), (28, 28), (8, 28)])
+    pygame.draw.polygon(image, (66, 54, 54), [(7, 16), (12, 7), (24, 5), (30, 14), (24, 22), (11, 23)])
+    pygame.draw.lines(image, (255, 120, 30), False, [(9, 24), (16, 15), (24, 18), (29, 9)], 2)
+    return image
+
+
+def _lava_crack(rng):
+    image = pygame.Surface((42, 26), pygame.SRCALPHA)
+    points = [(1, rng.randint(9, 17))] + [(x, rng.randint(4, 22)) for x in range(9, 41, 8)]
+    pygame.draw.lines(image, (120, 30, 14), False, points, 7)
+    pygame.draw.lines(image, (255, 120, 30), False, points, 4)
+    pygame.draw.lines(image, (255, 230, 130), False, points, 1)
+    return image
+
+
+def _pipe(rng):
+    image = pygame.Surface((42, 24), pygame.SRCALPHA)
+    color = rng.choice([(120, 136, 142), (150, 120, 70)])
+    pygame.draw.rect(image, shade(color, 0.55), (0, 6, 42, 14), border_radius=3)
+    pygame.draw.rect(image, color, (0, 7, 42, 8), border_radius=3)
+    for x in (9, 31):
+        pygame.draw.rect(image, shade(color, 0.7), (x, 3, 5, 20), border_radius=1)
+    return image
+
+
+def _tank(rng):
+    image = pygame.Surface((30, 40), pygame.SRCALPHA)
+    liquid = rng.choice([(90, 255, 150), (255, 110, 220), (110, 210, 255)])
+    pygame.draw.rect(image, (54, 64, 74), (1, 0, 28, 40), border_radius=5)
+    pygame.draw.rect(image, shade(liquid, 0.6), (6, 5, 18, 30), border_radius=3)
+    pygame.draw.rect(image, liquid, (9, 8, 6, 24), border_radius=3)
+    for y in (12, 26):
+        pygame.draw.circle(image, (240, 255, 245), (19, y), 2)
+    return image
+
+
+def _column(rng):
+    image = pygame.Surface((30, 40), pygame.SRCALPHA)
+    pygame.draw.circle(image, (108, 100, 76), (15, 20), 15)
+    pygame.draw.circle(image, (206, 190, 138), (14, 19), 13)
+    for i in range(8):
+        angle = i * math.tau / 8
+        pygame.draw.line(image, (150, 136, 96), (14, 19), (14 + math.cos(angle) * 12, 19 + math.sin(angle) * 12), 1)
+    pygame.draw.circle(image, (232, 218, 170), (14, 19), 5)
+    return image
+
+
+def _ruin(rng):
+    image = pygame.Surface((40, 34), pygame.SRCALPHA)
+    pygame.draw.rect(image, (112, 104, 80), (1, 3, 38, 29))
+    pygame.draw.rect(image, (190, 176, 126), (3, 4, 34, 24))
+    pygame.draw.lines(image, (90, 200, 220), True, [(10, 9), (30, 9), (30, 23), (10, 23)], 2)
+    pygame.draw.circle(image, (90, 200, 220), (20, 16), 4, 1)
+    return image
+
+
+PIECE_MAKERS = {'brain': _brain, 'staghorn': _staghorn, 'table': _table, 'fan': _fan, 'anemone': _anemone,
+                'anchor': _anchor, 'hull_plate': _hull_plate, 'ribs': _ribs, 'lava_rock': _lava_rock,
+                'lava_crack': _lava_crack, 'pipe': _pipe, 'tank': _tank, 'column': _column, 'ruin': _ruin}
 
 
 def _fade_to_depth(piece, amount):

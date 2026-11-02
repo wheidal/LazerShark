@@ -23,6 +23,9 @@ from settings_manager import SettingsManager
 from resources import resource_path
 from channel import ChannelDirector, BANK_DAMAGE, BANK_INVULN_MS, BANK_PUSH
 from hazards import RadiationCloud, SMALL_CLOUD_RADIUS, SMALL_CLOUD_STEPS, WHIRLPOOL_SPAWN_MS, Whirlpool
+from areas import area_for
+from giant_wreck import GiantWreck, H as WRECK_H, SPAWN_EVERY_MS as WRECK_EVERY_MS, W as WRECK_W
+from features import GEYSER_HEIGHT, GEYSER_WIDTH, LaserGate, LavaGeyser
 from hud import Hud
 from shark_look import SharkLook
 from attract import AttractMode, Briefing
@@ -34,6 +37,7 @@ from weapons import WEAPONS, WeaponPowerup, WeaponState
 # The simulation always advances in 60 Hz steps, so game speed doesn't depend on frame rate
 STEP_MS = 1000 / 60
 MAX_STEPS_PER_FRAME = 5
+GATE_START_Y = -20
 ZOMBIE_FISH_CHANCE = 0.2
 ZOMBIE_FISH_FROM_SCORE = 15
 RESTART_LOCK_MS = 1000  # Ignore restart input briefly so mashing fire can't skip Game Over
@@ -384,6 +388,10 @@ def main():
     powerups = pygame.sprite.Group()
     enemy_shots = pygame.sprite.Group()
     drains = pygame.sprite.Group()
+    wreck_timer = 0
+    banner_next = None
+    banner_after = None
+    feature_timer = 0
     laser_jam = 0
     whirlpool_timer = 0
     banks = pygame.sprite.Group()
@@ -423,6 +431,10 @@ def main():
     if start_boss is not None:
         next_boss = start_boss
         score = BOSS_ROSTER[start_boss][1]
+        channel.set_area(area_for(next_boss))
+        graphics_enhancer.set_area_tint(channel.area.get('tint'))
+        banner = channel.area.get('hint')
+        banner_timer = 3500
 
     while running:
         frame_ms = clock.tick(60)
@@ -465,6 +477,11 @@ def main():
                 powerups.empty()
                 enemy_shots.empty()
                 drains.empty()
+                wreck_timer = 0
+                banner_next = None
+                banner_after = None
+                feature_timer = 0
+                graphics_enhancer.set_area_tint(None)
                 laser_jam = 0
                 whirlpool_timer = 0
                 banks.empty()
@@ -682,8 +699,12 @@ def main():
                 shark.missiles = max(shark.missiles, 2)
                 shark.torpedoes = max(shark.torpedoes, 1)
                 banner = f"{boss.name}!"
+                banner_next = boss.hint
                 banner_timer = 2000
             banner_timer -= dt
+            if banner_timer <= 0 and banner_next:
+                banner, banner_next, banner_after = banner_next, banner_after, None
+                banner_timer = 3000
 
             # Spawn obstacles and food every 1.5 seconds, inside the channel
             spawn_timer += dt
@@ -733,6 +754,44 @@ def main():
                         new_enemies = kind.create(spawn_x, shark.rect)
                         obstacles.add(new_enemies)
                         all_sprites.add(new_enemies)
+
+            # Giant wrecks lie across the channel, with loot and a mine inside
+            wreck_timer += dt
+            if wreck_timer > WRECK_EVERY_MS and boss_phase not in ('approach', 'fight') and not any(
+                    sprite.rect.top < 0 for group in (obstacles, foods, powerups) for sprite in group):
+                wreck_x = channel.wreck_spot(WRECK_W, WRECK_H)
+                if wreck_x is not None:
+                    wreck_timer = 0
+                    wreck = GiantWreck(wreck_x)
+                    banks.add(wreck)
+                    all_sprites.add(wreck)
+                    channel.block_for_wreck(wreck.rect.left, wreck.rect.right, WRECK_H)
+                    inside = wreck.passage_x()
+                    mine = OBSTACLE_TYPES['mine'](inside, -WRECK_H // 2)
+                    obstacles.add(mine)
+                    all_sprites.add(mine)
+                    loot = [WeaponPowerup(inside, -WRECK_H // 4, random.choice(list(WEAPONS))),
+                            random.choice([MissilePowerup, TorpedoPowerup, ShieldPowerup])(inside, -WRECK_H * 3 // 4)]
+                    powerups.add(loot)
+                    all_sprites.add(loot)
+
+            # Each later area has a hazard of its own
+            feature = channel.area.get('feature')
+            feature_timer += dt
+            if feature and feature_timer > channel.area['feature_every_ms'] and \
+                    boss_phase not in ('approach', 'fight') and channel.zone != 'arena':
+                feature_timer = 0
+                if feature == 'geyser':
+                    spawn_x = channel.spawn_x(GEYSER_WIDTH, blocking=True, height=GEYSER_HEIGHT)
+                    if spawn_x is not None:
+                        geyser = LavaGeyser(spawn_x, -GEYSER_HEIGHT)
+                        enemy_shots.add(geyser)
+                        all_sprites.add(geyser)
+                else:
+                    gate = LaserGate(*channel.gate_span(), GATE_START_Y)
+                    enemy_shots.add(gate)
+                    obstacles.add(gate.switch)
+                    all_sprites.add(gate, gate.switch)
 
             # Whirlpools open up where there's room to swim around them
             whirlpool_timer += dt
@@ -877,7 +936,7 @@ def main():
                         graphics_enhancer.trigger_damage_effect()
                     emitter.emit(shark.rect.center, color=(180,180,200), count=14, size=8, speed=5, lifetime=20)
                 bank_invuln = BANK_INVULN_MS
-                to_channel = touching[0].channel_center - shark.rect.centerx
+                to_channel = touching[0].escape_x(shark.rect.centerx) - shark.rect.centerx
                 shark.rect.centerx += max(-BANK_PUSH, min(BANK_PUSH, to_channel))
                 shark.rect.x = max(0, min(shark.rect.x, 800 - shark.rect.width))
             elif bank_invuln > 0:
@@ -892,9 +951,6 @@ def main():
             for shot in pygame.sprite.groupcollide(projectiles, obstacles, False, False, pixels_touch).keys():
                 targets = pygame.sprite.spritecollide(shot, obstacles, False, pixels_touch)
                 if isinstance(shot, Laser):
-                    if shot.pierce:
-                        targets = [obs for obs in targets if obs not in shot.already_hit]
-                        shot.already_hit.update(targets)
                     for obs in targets:
                         obs.hits += shot.power
                         emitter.emit(shot.rect.midtop, color=obs.debris_color, count=4, size=4, speed=3, lifetime=10)
@@ -906,8 +962,7 @@ def main():
                         emitter.emit(obs.rect.center, color=color, count=24, size=10, speed=5, lifetime=28)
                         if obs not in destroyed:
                             destroyed.append(obs)
-                if not (isinstance(shot, Laser) and shot.pierce):
-                    shot.kill()
+                shot.kill()
 
             # Beams hit once, through a shield first
             for beam in pygame.sprite.spritecollide(shark, enemy_shots, False, pixels_touch):
@@ -1010,16 +1065,10 @@ def main():
                         generic_collision_sound.play()
                         graphics_enhancer.trigger_damage_effect()
                     emitter.emit(shark.rect.center, color=(255,80,60), count=16, size=10, speed=6, lifetime=22)
-                for shot, parts in pygame.sprite.groupcollide(projectiles, boss.parts, False, False, pixels_touch).items():
+                for shot, parts in pygame.sprite.groupcollide(projectiles, boss.parts, True, False, pixels_touch).items():
                     is_laser = isinstance(shot, Laser)
-                    if is_laser and boss in shot.already_hit:
-                        continue  # A piercing shot hurts the boss once, however much of it passes through
                     boss.shot_power = shot.power if is_laser else 1
                     boss.on_shot(parts, not is_laser)
-                    if is_laser and shot.pierce:
-                        shot.already_hit.add(boss)
-                    else:
-                        shot.kill()
                     emitter.emit(shot.rect.midtop, color=(255,220,120), count=6, size=5, speed=3, lifetime=12)
                 if boss.dead:
                     for part in boss.parts:
@@ -1036,6 +1085,11 @@ def main():
                     channel.leave_arena()
                     boss_phase = 'beaten'
                     next_boss += 1
+                    if area_for(next_boss) is not channel.area:
+                        channel.set_area(area_for(next_boss))
+                        graphics_enhancer.set_area_tint(channel.area.get('tint'))
+                        banner_next = f"Entering {channel.area['name']}"
+                        banner_after = channel.area.get('hint')
                     banner = f"{boss.name} DEFEATED!  Fully repaired"
                     boss = None
                     banner_timer = 3500

@@ -235,3 +235,30 @@ def test_number_key_on_the_title_jumps_to_that_boss(play, monkeypatch):
 
     play(script, max_frames=6000)
     assert seen['name'] == BOSS_ROSTER[2][0].name
+
+
+@pytest.mark.parametrize('cls', ALL_BOSSES)
+def test_every_boss_has_a_hint_that_fits_on_screen(display, cls):
+    from hud import Hud
+    assert cls.hint
+    assert Hud().banner_font.size(cls.hint)[0] + 40 <= display.get_width()
+
+
+def test_hint_follows_the_name_when_a_fight_starts(play):
+    seen = {}
+
+    def script(state, frame):
+        state['energy'] = 100
+        if frame == 1:
+            state['next_boss'] = 3
+            state['score'] = BOSS_ROSTER[3][1]
+        if state['boss']:
+            seen.setdefault('first', state['banner'])
+            state['boss'].hazards.empty()
+            if state['banner'] == state['boss'].hint:
+                seen['hint'] = state['banner']
+                return True
+
+    play(script, max_frames=6000)
+    assert seen['first'] == RivalShark.name + '!'
+    assert seen['hint'] == RivalShark.hint
