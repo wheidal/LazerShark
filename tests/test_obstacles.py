@@ -116,3 +116,93 @@ def test_every_kind_keeps_clear_of_the_coast_in_play(play, monkeypatch):
     play(script, quiet=False, max_frames=40000)
     assert seen['kinds'] == set(OBSTACLE_TYPES)
     assert seen['touches'] == 0
+
+
+def far_shark():
+    rect = pygame.Rect(0, 0, 45, 104)
+    rect.center = (700, 500)
+    return rect
+
+
+def test_mine_ignores_a_distant_shark_and_arms_for_a_close_one(display):
+    mine = SeaMine(400, 200)
+    mine.sense(far_shark())
+    assert mine.fuse is None
+    near = pygame.Rect(0, 0, 45, 104)
+    near.midtop = (mine.rect.centerx, mine.rect.centery + SeaMine.SENSE_RADIUS - 5)
+    mine.sense(near)
+    assert mine.fuse == SeaMine.FUSE_STEPS
+
+
+def test_armed_mine_counts_down_and_stays_armed(display):
+    mine = SeaMine(400, 200)
+    mine.fuse = 3
+    for _ in range(2):
+        mine.update()
+        assert not mine.fuse_done
+    mine.sense(far_shark())  # Swimming away doesn't defuse it
+    mine.update()
+    assert mine.fuse_done
+
+
+def test_there_is_time_to_get_clear_of_a_fuse(display):
+    margin = SeaMine.blast_radius - SeaMine.SENSE_RADIUS
+    assert SeaMine.FUSE_STEPS * 5 > margin * 2  # Even when scrolling closes part of the gap
+    assert SeaMine.blast_radius > SeaMine.SENSE_RADIUS
+
+
+def mine_scene(play, offset, shot=False, shield=False, beside=0):
+    seen = {}
+
+    def script(state, frame):
+        shark = state['shark'].rect
+        if frame == 1:
+            state['energy'] = 100
+            if shield:
+                state['shield_active'], state['shield_strength'] = True, 100
+            seen['mine'] = SeaMine(shark.centerx + beside, shark.top - offset)
+            state['obstacles'].add(seen['mine'])
+            seen['score'] = state['score']
+            if shot:
+                state['projectiles'].add(Laser(seen['mine'].rect.centerx, seen['mine'].rect.bottom + 8))
+        seen['energy'] = state['energy']
+        seen['gained'] = state['score'] - seen['score']
+        seen['shield'] = state['shield_strength']
+        return frame >= SeaMine.FUSE_STEPS + 12
+
+    play(script)
+    return seen
+
+
+def test_lingering_near_a_mine_costs_the_blast_and_scores_nothing(play):
+    seen = mine_scene(play, 60, beside=85)
+    assert not seen['mine'].alive()
+    assert seen['energy'] == pytest.approx(100 - SeaMine.blast_damage, abs=4)
+    assert seen['gained'] == 0
+
+
+def test_shooting_a_mine_up_close_hurts_just_as_much(play):
+    seen = mine_scene(play, 80, shot=True)
+    assert not seen['mine'].alive()
+    assert seen['energy'] == pytest.approx(100 - SeaMine.blast_damage, abs=4)
+    assert seen['gained'] == SeaMine.reward
+
+
+def test_shooting_a_mine_from_afar_is_safe_and_scores(play):
+    seen = mine_scene(play, SeaMine.blast_radius + 90, shot=True)
+    assert not seen['mine'].alive()
+    assert seen['energy'] > 95
+    assert seen['gained'] == SeaMine.reward
+
+
+def test_shield_absorbs_a_mine_blast(play):
+    seen = mine_scene(play, 60, shield=True, beside=85)
+    assert seen['energy'] > 95
+    assert seen['shield'] == pytest.approx(100 - SeaMine.blast_damage, abs=1)
+
+
+def test_sitting_still_in_a_mines_path_is_worse_than_its_blast(play):
+    seen = mine_scene(play, 90)
+    assert not seen['mine'].alive()
+    assert seen['energy'] == pytest.approx(100 - SeaMine.damage, abs=4)
+    assert SeaMine.damage > SeaMine.blast_damage

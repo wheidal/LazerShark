@@ -10,7 +10,7 @@ from enemies import RadioactivePiranha
 from food import SmallFish, ZombieFish
 from graphics_enhancements import ParticleEffects
 from hazards import _whirlpool_art
-from obstacle import EmpJellyfish, OBSTACLE_TYPES, RadiationBarrel
+from obstacle import EmpJellyfish, OBSTACLE_TYPES, RadiationBarrel, SeaMine
 from player import Shark
 from player_enhanced import SharkWithSprites
 from shark_look import SharkLook
@@ -187,6 +187,7 @@ def _hazard_rows():
     whirlpool.fill((80, 90, 100), special_flags=pygame.BLEND_RGB_ADD)  # Stands out on the dark panel
     shark_rect = pygame.Rect(0, 0, 1, 1)
     return [
+        (SeaMine(0, 0).image, "Sea mine", "Goes off when you get close. Shoot it from far away, or steer clear"),
         (RadiationBarrel(0, 0).image, "Radiation barrel", "Shoot it before it leaks. Clouds go right through your shield"),
         (RadioactivePiranha(0, 0, shark_rect).image, "Radioactive piranha", "They chase you, and leave radiation behind when killed"),
         (ZombieFish(0, 0).image, "Zombie fish", "Grey with red crosses for eyes. Don't eat it: it bites!"),
