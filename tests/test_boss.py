@@ -247,7 +247,8 @@ def test_each_fight_rolls_values_within_its_difficulty(display):
         eels = [MorayEel(LEFT, RIGHT, name) for _ in range(200)]
         for attribute, key in (('max_health', 'health'), ('bite_damage', 'bite'), ('warn_steps', 'warn_steps')):
             values = {getattr(eel, attribute) for eel in eels}
-            assert min(values) >= ranges[key][0] and max(values) <= ranges[key][1]
+            scale = MorayEel.health_bonus if key == 'health' else 1
+            assert min(values) >= int(ranges[key][0] * scale) and max(values) <= ranges[key][1] * scale
             assert len(values) > 1
 
 
@@ -260,7 +261,7 @@ def test_harder_levels_are_harder_on_every_value():
 
 def test_unknown_difficulty_falls_back_to_normal(display):
     low, high = boss.DIFFICULTIES['normal']['health']
-    assert low <= MorayEel(LEFT, RIGHT, 'nightmare').max_health <= high
+    assert low * MorayEel.health_bonus - 1 <= MorayEel(LEFT, RIGHT, 'nightmare').max_health <= high * MorayEel.health_bonus
 
 
 def test_menu_choice_is_saved_and_used_by_the_fight(play, tmp_path):

@@ -33,7 +33,7 @@ from shark_look import SharkLook
 from attract import AttractMode, Briefing
 from boss import CONTACT_INVULN_MS, DEFAULT_DIFFICULTY, DIFFICULTIES, LASER_RECHARGE, VICTORY_SCORE
 from bosses import BOSS_ROSTER
-from enemies import ENEMY_LIMIT, ENEMY_SPAWN_MS, Enemy, choose_enemy
+from enemies import ENEMY_LIMIT, Enemy, choose_enemy, enemy_spawn_ms, toughen
 from weapons import OBSTACLES_FOR_UPGRADE, UPGRADE_SPAWN_MS, WeaponPowerup, WeaponState
 
 # The simulation always advances in 60 Hz steps, so game speed doesn't depend on frame rate
@@ -741,7 +741,7 @@ def main():
 
             # Spawn enemies, up to the limit for this difficulty
             enemy_timer += dt
-            if enemy_timer > ENEMY_SPAWN_MS[difficulty] and boss_phase not in ('approach', 'fight'):
+            if enemy_timer > enemy_spawn_ms(difficulty, next_boss) and boss_phase not in ('approach', 'fight'):
                 enemy_timer = 0
                 on_screen = sum(isinstance(sprite, Enemy) for sprite in obstacles)
                 kind = choose_enemy(channel.enemy_kinds(), score)
@@ -749,6 +749,7 @@ def main():
                     spawn_x = channel.spawn_x(kind.WIDTH, blocking=True, height=kind.HEIGHT)
                     if spawn_x is not None:
                         new_enemies = kind.create(spawn_x, shark.rect)
+                        toughen(new_enemies, next_boss)
                         obstacles.add(new_enemies)
                         all_sprites.add(new_enemies)
 

@@ -4,7 +4,7 @@ import pygame
 import pytest
 
 import channel as ch
-from enemies import (ENEMY_LIMIT, ENEMY_SPAWN_MS, ENEMY_TYPES, Barracuda, Enemy, EnemyTorpedo, EvilSub, KamikazeTuna,
+from enemies import (SPAWN_SPEEDUP_PER_AREA, enemy_spawn_ms, toughen, ENEMY_LIMIT, ENEMY_SPAWN_MS, ENEMY_TYPES, Barracuda, Enemy, EnemyTorpedo, EvilSub, KamikazeTuna,
                      LaserManta, MantaBeam, choose_enemy)
 from obstacle import SeaMine
 from projectile import Laser
@@ -151,6 +151,7 @@ def test_a_shot_tuna_blast_clears_what_is_near_it(play):
 
     def build(state):
         tuna = KamikazeTuna(400, 200, state['shark'].rect)
+        tuna.hits = tuna.toughness - 1
         neighbour['near'] = Barracuda(450, 200, state['shark'].rect)
         state['obstacles'].add(neighbour['near'])
         state['projectiles'].add(Laser(tuna.rect.centerx, tuna.rect.bottom + 8))
@@ -319,3 +320,46 @@ def test_steering_keeps_enemies_off_the_reef_in_play(play, monkeypatch):
     play(script, quiet=False, max_frames=3000)
     assert seen['total'] > 1000
     assert seen['on'] / seen['total'] < 0.01
+
+
+def test_enemies_get_tougher_with_each_area(display):
+    def toughness(area):
+        tuna = KamikazeTuna(400, 0, SHARK)
+        toughen([tuna], area)
+        return tuna.toughness
+
+    assert toughness(0) == KamikazeTuna.toughness
+    assert toughness(5) > toughness(0)
+    sub = EvilSub(400, 0, SHARK)
+    toughen([sub], 5)
+    assert sub.toughness == round(EvilSub.toughness * 1.4)
+
+
+def test_the_class_value_stays_put_when_one_enemy_is_toughened(display):
+    start = LaserManta.toughness
+    toughen([LaserManta(400, 0, SHARK)], 5)
+    assert LaserManta.toughness == start
+
+
+def test_enemies_arrive_sooner_with_each_area():
+    for level in ENEMY_SPAWN_MS:
+        assert enemy_spawn_ms(level, 0) == ENEMY_SPAWN_MS[level]
+        assert enemy_spawn_ms(level, 5) == pytest.approx(ENEMY_SPAWN_MS[level] * (1 - SPAWN_SPEEDUP_PER_AREA) ** 5)
+
+
+def test_spawned_enemies_in_a_later_area_are_tougher_in_play(play):
+    seen = {}
+
+    def script(state, frame):
+        state['energy'] = 100
+        if frame == 1:
+            state['next_boss'] = 5
+            state['channel'].set_area(state['channel'].area)
+            state['score'] = 0
+        for sprite in state['obstacles']:
+            if isinstance(sprite, KamikazeTuna):
+                seen['toughness'] = sprite.toughness
+                return True
+
+    play(script, quiet=False, max_frames=20000)
+    assert seen['toughness'] > KamikazeTuna.toughness

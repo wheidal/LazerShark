@@ -4,7 +4,7 @@ import pygame
 import pytest
 
 import boss as boss_module
-from bosses import BOSS_ROSTER, GiantSquid, Guardian, LavaCrab, LavaVent, RivalShark
+from bosses import BOSS_ROSTER, DrRask, GiantSquid, Guardian, LavaCrab, LavaVent, RivalShark
 from projectile import Laser
 
 LEFT, RIGHT = 75, 725
@@ -260,3 +260,11 @@ def test_hint_follows_the_name_when_a_fight_starts(play):
     play(script, max_frames=6000)
     assert seen['first'] == RivalShark.name + '!'
     assert seen['hint'] == RivalShark.hint
+
+
+def test_bosses_gain_health_except_the_rival(display):
+    assert GiantSquid.health_bonus > 1 and LavaCrab.health_bonus > 1 and DrRask.health_bonus > 1
+    assert RivalShark.health_bonus == 1
+    low, high = boss_module.DIFFICULTIES['normal']['health']
+    squid = GiantSquid(LEFT, RIGHT, 'normal')
+    assert low * GiantSquid.health_scale * 1.15 - 1 <= squid.max_health <= high * GiantSquid.health_scale * 1.15
