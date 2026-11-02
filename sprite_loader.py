@@ -166,8 +166,6 @@ class EnhancedShark(AnimatedSprite):
         # Shark-specific attributes
         self.speed = 5
         self.laser_energy = 100
-        self.missiles = 3
-        self.torpedoes = 1
         self.fire_cooldown = 0
         
         # Movement state for animation
@@ -300,23 +298,6 @@ class EnhancedShark(AnimatedSprite):
             return True
         return False
     
-    def fire_missile(self) -> bool:
-        """Fire missile if available"""
-        if self.missiles > 0 and self.fire_cooldown <= 0:
-            self.missiles -= 1
-            self.fire_cooldown = 0.3  # 300ms cooldown
-            return True
-        return False
-    
-    def fire_torpedo(self) -> bool:
-        """Fire torpedo if available"""
-        if self.torpedoes > 0 and self.fire_cooldown <= 0:
-            self.torpedoes -= 1
-            self.fire_cooldown = 0.5  # 500ms cooldown
-            return True
-        return False
-
-
 def load_enhanced_sprites():
     """Load and enhance all game sprites from files"""
     sprites = {}

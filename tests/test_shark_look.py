@@ -42,7 +42,7 @@ def test_shark_leans_into_turns_and_back(display):
 def test_weapon_colour_shows_on_the_shark(display):
     shark = SharkWithSprites(400, 300)
     look = SharkLook()
-    frames = {look._frame(shark.image, kind) for kind in ('laser', 'fan', 'chum', 'rapid')}
+    frames = {look._frame(shark.image, kind) for kind in ('laser', 'fan', 'shotgun', 'rapid')}
     assert len(frames) == 4
 
 

@@ -121,7 +121,7 @@ def test_eating_a_zombie_fish_costs_energy_and_no_score(play):
 def test_radiation_goes_through_the_shield_and_keeps_weapon_level(play):
     def setup(state, seen):
         state['shield_active'], state['shield_strength'] = True, 100
-        state['weapon'].collect('fan')
+        state['weapon'].upgrade()
         cloud = RadiationCloud(state['shark'].rect.center)
         cloud.age = 100
         state['drains'].add(cloud)
@@ -129,7 +129,7 @@ def test_radiation_goes_through_the_shield_and_keeps_weapon_level(play):
     seen = scene(play, setup, frames=30)
     assert seen['energy'] < seen['start'] - 5
     assert seen['shield'] == 100
-    assert seen['label'] == 'FAN 1'
+    assert seen['label'] == 'SHOTGUN'
 
 
 def test_emp_sting_jams_the_laser_even_through_a_shield(play):

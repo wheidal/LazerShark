@@ -1,6 +1,6 @@
 """
-Laser upgrades. Collecting a new type swaps to it; collecting the same type powers it up.
-Add a weapon by adding an entry to WEAPONS, with one row per level.
+The laser upgrades, in order. Each upgrade pickup moves the shark one step up the ladder, and a hit
+moves it one step back. Add a weapon by adding it to WEAPONS and to its place in LADDER.
 """
 import math
 
@@ -8,46 +8,28 @@ import pygame
 
 from projectile import Laser
 
-MAX_LEVEL = 3
 BASE = 'laser'
-OFF_SCREEN = pygame.Rect(-40, -60, 880, 720)
+LADDER = [BASE, 'shotgun', 'rapid', 'fan']
 
 # cost: laser power per shot. cooldown: seconds between shots. power: damage per bolt.
-# shots and spread (degrees either side of straight up). reach: px a bolt travels.
+# shots and spread (degrees either side of straight up).
 WEAPONS = {
-    'fan': {
-        'name': 'FAN', 'letter': 'F', 'color': (110, 240, 130), 'size': (6, 16), 'speed': 11,
-        'levels': [
-            {'cost': 4, 'cooldown': 0.16, 'power': 0.7, 'shots': 3, 'spread': 12, 'reach': 900},
-            {'cost': 5, 'cooldown': 0.16, 'power': 0.7, 'shots': 5, 'spread': 20, 'reach': 900},
-            {'cost': 6, 'cooldown': 0.16, 'power': 0.7, 'shots': 7, 'spread': 30, 'reach': 900},
-        ],
-    },
-    'chum': {
-        'name': 'CHUM', 'letter': 'C', 'color': (255, 50, 40), 'size': (11, 11), 'speed': 10,
-        'ball': True,
-        'levels': [
-            {'cost': 8, 'cooldown': 0.45, 'power': 0.5, 'shots': 7, 'spread': 58, 'reach': 900},
-            {'cost': 8, 'cooldown': 0.42, 'power': 0.5, 'shots': 9, 'spread': 58, 'reach': 900},
-            {'cost': 8, 'cooldown': 0.38, 'power': 0.6, 'shots': 11, 'spread': 58, 'reach': 900},
-        ],
-    },
-    'rapid': {
-        'name': 'RAPID', 'letter': 'R', 'color': (255, 240, 90), 'size': (5, 16), 'speed': 15,
-        'levels': [
-            {'cost': 2, 'cooldown': 0.06, 'power': 0.8, 'shots': 1, 'spread': 0, 'reach': 900},
-            {'cost': 2, 'cooldown': 0.05, 'power': 0.9, 'shots': 1, 'spread': 0, 'reach': 900},
-            {'cost': 2, 'cooldown': 0.04, 'power': 1.0, 'shots': 1, 'spread': 0, 'reach': 900},
-        ],
-    },
+    'shotgun': {'name': 'SHOTGUN', 'color': (255, 50, 40), 'size': (11, 11), 'speed': 10, 'ball': True,
+                'cost': 8, 'cooldown': 0.42, 'power': 0.5, 'shots': 9, 'spread': 58},
+    'rapid': {'name': 'RAPID', 'color': (255, 240, 90), 'size': (5, 16), 'speed': 15,
+              'cost': 2, 'cooldown': 0.05, 'power': 0.9, 'shots': 1, 'spread': 0},
+    'fan': {'name': 'FAN', 'color': (110, 240, 130), 'size': (6, 16), 'speed': 11,
+            'cost': 6, 'cooldown': 0.16, 'power': 0.7, 'shots': 7, 'spread': 30},
 }
 BASE_COST = 3
 BASE_COOLDOWN = 0.1
-EARNED_WEAPON = 'fan'  # What destroying enough obstacles gives a shark still on the plain laser
-EARNED_LEVEL = 2
+UPGRADE_MS = 25000  # How long a step up the ladder lasts before it drops back one
+UPGRADE_SPAWN_MS = 25000  # How often a new upgrade drifts in
+OBSTACLES_FOR_UPGRADE = 10
+OFF_SCREEN = pygame.Rect(-40, -60, 880, 720)
 
 _bolts = {}
-_icons = {}
+_icon = {}
 
 
 def _bolt_image(kind, angle):
@@ -68,9 +50,9 @@ def _bolt_image(kind, angle):
 
 
 class Bolt(Laser):
-    """A laser shot that can fly at an angle and run out of range."""
+    """A laser shot that can fly at an angle."""
 
-    def __init__(self, x, y, kind, stats, angle=0):
+    def __init__(self, x, y, kind, angle=0):
         super().__init__(x, y)
         spec = WEAPONS[kind]
         self.image, self.mask = _bolt_image(kind, round(angle))
@@ -78,89 +60,104 @@ class Bolt(Laser):
         self.pos = pygame.math.Vector2(self.rect.center)
         radians = math.radians(angle)
         self.velocity = pygame.math.Vector2(math.sin(radians), -math.cos(radians)) * spec['speed']
-        self.power = stats['power']
-        self.reach = stats['reach']
+        self.power = spec['power']
 
     def update(self, *args, **kwargs):
         self.pos += self.velocity
         self.rect.center = self.pos
-        self.reach -= self.velocity.length()
-        if self.reach <= 0 or not OFF_SCREEN.colliderect(self.rect):
+        if not OFF_SCREEN.colliderect(self.rect):
             self.kill()
 
 
 class WeaponState:
-    """The shark's current laser type and level."""
+    """Where the shark is on the ladder."""
 
     def __init__(self):
         self.kind = BASE
-        self.level = 1
+        self.time_left = 0
 
     @property
-    def _stats(self):
-        return WEAPONS[self.kind]['levels'][self.level - 1] if self.kind != BASE else None
+    def _spec(self):
+        return WEAPONS.get(self.kind)
 
     @property
     def cost(self):
-        return self._stats['cost'] if self._stats else BASE_COST
+        return self._spec['cost'] if self._spec else BASE_COST
 
     @property
     def cooldown(self):
-        return self._stats['cooldown'] if self._stats else BASE_COOLDOWN
+        return self._spec['cooldown'] if self._spec else BASE_COOLDOWN
 
     @property
     def label(self):
         """What the HUD shows, which is nothing for the plain laser."""
-        return None if self.kind == BASE else f"{WEAPONS[self.kind]['name']} {self.level}"
+        return self._spec['name'] if self._spec else None
 
-    def collect(self, kind):
-        if kind == self.kind:
-            self.level = min(MAX_LEVEL, self.level + 1)
-        else:
-            self.kind, self.level = kind, 1
+    @property
+    def at_best(self):
+        return self.kind == LADDER[-1]
 
-    def earn(self):
-        """A reward for destroying obstacles."""
-        if self.kind == BASE:
-            self.kind, self.level = EARNED_WEAPON, EARNED_LEVEL
-        else:
-            self.level = min(MAX_LEVEL, self.level + 1)
+    @property
+    def time_share(self):
+        """How much of its time this upgrade has left, from 1 down to 0. None for the plain laser."""
+        return self.time_left / UPGRADE_MS if self._spec else None
 
-    def lose_level(self):
-        """Taking a hit costs a level, and the last one drops back to the plain laser."""
-        if self.level > 1:
-            self.level -= 1
-        else:
-            self.kind = BASE
+    def upgrade(self):
+        self.kind = LADDER[min(len(LADDER) - 1, LADDER.index(self.kind) + 1)]
+        self.time_left = UPGRADE_MS
+
+    def downgrade(self):
+        self.kind = LADDER[max(0, LADDER.index(self.kind) - 1)]
+        self.time_left = UPGRADE_MS
+
+    def update(self, dt):
+        if self.kind != BASE:
+            self.time_left -= dt
+            if self.time_left <= 0:
+                self.downgrade()
 
     def fire(self, x, y):
-        stats = self._stats
-        if not stats:
+        spec = self._spec
+        if not spec:
             return [Laser(x, y)]
-        count = stats['shots']
+        count = spec['shots']
         if count == 1:
-            return [Bolt(x, y, self.kind, stats)]
-        return [Bolt(x, y, self.kind, stats, -stats['spread'] + i * 2 * stats['spread'] / (count - 1))
-                for i in range(count)]
+            return [Bolt(x, y, self.kind)]
+        return [Bolt(x, y, self.kind, -spec['spread'] + i * 2 * spec['spread'] / (count - 1)) for i in range(count)]
 
 
-def weapon_icon(kind):
-    if kind not in _icons:
-        spec = WEAPONS[kind]
-        image = pygame.Surface((32, 32), pygame.SRCALPHA)
-        points = [(16 + math.cos(i * math.pi / 3) * 15, 16 + math.sin(i * math.pi / 3) * 15) for i in range(6)]
-        pygame.draw.polygon(image, spec['color'] + (70,), [(16 + (x - 16) * 1.06, 16 + (y - 16) * 1.06) for x, y in points])
-        pygame.draw.polygon(image, (12, 24, 40), points)
-        pygame.draw.polygon(image, spec['color'], points, 3)
-        letter = pygame.font.SysFont(None, 26).render(spec['letter'], True, (255, 255, 255))
-        image.blit(letter, letter.get_rect(center=(16, 16)))
-        _icons[kind] = image
-    return _icons[kind]
+def upgrade_icon():
+    """A plain yellow hexagon. Every upgrade looks the same, as it just means 'better'."""
+    if 'icon' not in _icon:
+        image = pygame.Surface((28, 28), pygame.SRCALPHA)
+        points = [(14 + math.cos(i * math.pi / 3 + math.pi / 6) * 13, 14 + math.sin(i * math.pi / 3 + math.pi / 6) * 13)
+                  for i in range(6)]
+        pygame.draw.polygon(image, (255, 220, 40), points)
+        _icon['icon'] = image
+    return _icon['icon']
+
+
+def weapon_swatch(kind):
+    """A sample of what a weapon fires, for the briefing."""
+    image = pygame.Surface((34, 34), pygame.SRCALPHA)
+    color = WEAPONS[kind]['color'] if kind in WEAPONS else (255, 90, 90)
+    if kind == 'shotgun':
+        for x, y in ((6, 20), (11, 11), (17, 7), (23, 11), (28, 20)):
+            pygame.draw.circle(image, color, (x, y), 4)
+    elif kind == 'fan':
+        for end in ((4, 6), (17, 2), (30, 6)):
+            pygame.draw.line(image, color, (17, 32), end, 3)
+    elif kind == 'rapid':
+        for y in (2, 13, 24):
+            pygame.draw.rect(image, color, (14, y, 6, 8), border_radius=2)
+    else:
+        pygame.draw.rect(image, color, (13, 4, 8, 26), border_radius=3)
+        pygame.draw.rect(image, (255, 255, 255), (16, 6, 2, 22))
+    return image
 
 
 class WeaponPowerup(pygame.sprite.Sprite):
-    def __init__(self, x, y, kind):
+    def __init__(self, x, y):
         super().__init__()
-        self.kind = kind
-        self.image = weapon_icon(kind)
+        self.image = upgrade_icon()
         self.rect = self.image.get_rect(center=(x, y))

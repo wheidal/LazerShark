@@ -56,7 +56,7 @@ def test_lasers_alone_can_always_finish_it(display, cls):
         if step % 6 == 0:
             aim = fight.targets()
             if aim and aim[0].alive():
-                fight.on_shot(pygame.sprite.Group(aim[0]).sprites(), False)
+                fight.on_shot(pygame.sprite.Group(aim[0]).sprites())
         if fight.dead:
             return
     raise AssertionError(f'{cls.__name__} could not be beaten with lasers')
@@ -65,14 +65,14 @@ def test_lasers_alone_can_always_finish_it(display, cls):
 def test_squid_head_is_safe_until_every_tentacle_is_gone(display):
     squid = GiantSquid(LEFT, RIGHT)
     squid.update(shark_at())
-    squid.on_shot([squid.head], True)
+    squid.on_shot([squid.head])
     assert squid.health == squid.max_health
     for tentacle in squid.tentacles:
         while tentacle['hp'] > 0:
-            squid.on_shot([tentacle['parts'][0]], True)
+            squid.on_shot([tentacle['parts'][0]])
     before = squid.health
     assert before > 0
-    squid.on_shot([squid.head], False)
+    squid.on_shot([squid.head])
     assert squid.health == before - boss_module.HEAD_LASER_DAMAGE
 
 
@@ -90,16 +90,14 @@ def test_squid_shot_off_mid_slam_recovers(display):
 def test_crab_shrugs_off_lasers_until_it_overheats(display):
     crab = LavaCrab(LEFT, RIGHT)
     crab.update(shark_at())
-    crab.on_shot([crab.shell], False)
+    crab.on_shot([crab.shell])
     assert crab.health == crab.max_health
-    crab.on_shot([crab.shell], True)
-    assert crab.health == crab.max_health - crab.ARMOUR_HEAVY_DAMAGE
     for _ in range(2000):
         crab.update(shark_at())
         if crab.state == 'overheat':
             break
     before = crab.health
-    crab.on_shot([crab.shell], False)
+    crab.on_shot([crab.shell])
     assert crab.health == before - boss_module.HEAD_LASER_DAMAGE
 
 
@@ -123,14 +121,14 @@ def test_vents_warn_long_enough_to_swim_out_and_only_hurt_when_erupting(display)
 def test_rival_shield_needs_the_lit_switch(display):
     rival = RivalShark(LEFT, RIGHT)
     rival.update(shark_at())
-    rival.on_shot([rival.body], True)
+    rival.on_shot([rival.body])
     assert rival.health == rival.max_health and rival.shielded
-    rival.on_shot([rival.switches[1 - rival.lit]], False)
+    rival.on_shot([rival.switches[1 - rival.lit]])
     assert rival.shielded
     lit = rival.lit
-    rival.on_shot([rival.switches[lit]], False)
+    rival.on_shot([rival.switches[lit]])
     assert not rival.shielded
-    rival.on_shot([rival.body], False)
+    rival.on_shot([rival.body])
     assert rival.health == rival.max_health - boss_module.HEAD_LASER_DAMAGE
     for _ in range(rival.SHIELD_DOWN_STEPS + 1):
         rival.update(shark_at())
@@ -168,10 +166,10 @@ def test_guardian_cycles_every_attack_and_opens_up_after_each(display):
 def test_guardian_armour_blocks_lasers_except_when_open(display):
     guardian = Guardian(LEFT, RIGHT)
     guardian.update(shark_at())
-    guardian.on_shot([guardian.body], False)
+    guardian.on_shot([guardian.body])
     assert guardian.health == guardian.max_health
     guardian.state = 'open'
-    guardian.on_shot([guardian.body], False)
+    guardian.on_shot([guardian.body])
     assert guardian.health == guardian.max_health - boss_module.HEAD_LASER_DAMAGE
 
 
@@ -250,8 +248,8 @@ def test_hint_follows_the_name_when_a_fight_starts(play):
     def script(state, frame):
         state['energy'] = 100
         if frame == 1:
-            state['next_boss'] = 3
-            state['score'] = BOSS_ROSTER[3][1]
+            state['next_boss'] = 4
+            state['score'] = BOSS_ROSTER[4][1]
         if state['boss']:
             seen.setdefault('first', state['banner'])
             state['boss'].hazards.empty()

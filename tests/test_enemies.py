@@ -7,7 +7,7 @@ import channel as ch
 from enemies import (ENEMY_LIMIT, ENEMY_SPAWN_MS, ENEMY_TYPES, Barracuda, Enemy, EnemyTorpedo, EvilSub, KamikazeTuna,
                      LaserManta, MantaBeam, choose_enemy)
 from obstacle import SeaMine
-from projectile import Laser, Missile
+from projectile import Laser
 
 SHARK = pygame.Rect(380, 450, 45, 104)
 
@@ -153,7 +153,7 @@ def test_a_shot_tuna_blast_clears_what_is_near_it(play):
         tuna = KamikazeTuna(400, 200, state['shark'].rect)
         neighbour['near'] = Barracuda(450, 200, state['shark'].rect)
         state['obstacles'].add(neighbour['near'])
-        state['projectiles'].add(Missile(tuna.rect.centerx, tuna.rect.bottom))
+        state['projectiles'].add(Laser(tuna.rect.centerx, tuna.rect.bottom + 8))
         return tuna
 
     enemy_scene(play, build)

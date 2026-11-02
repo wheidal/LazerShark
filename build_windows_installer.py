@@ -185,8 +185,6 @@ Simply run {GAME_NAME}.exe to start the game!
 
 **Weapons:**
 - Space / A Button: Fire Laser
-- Left Alt / B Button: Fire Missile  
-- Left Ctrl / X Button: Fire Torpedo
 
 **Other:**
 - P / Start: Pause

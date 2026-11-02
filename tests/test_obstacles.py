@@ -6,7 +6,7 @@ import pytest
 import channel as ch
 from enemies import Enemy
 from obstacle import CoralReef, Jellyfish, OBSTACLE_TYPES, SeaMine, Shipwreck
-from projectile import Laser, Missile
+from projectile import Laser
 
 
 def test_every_zone_only_uses_real_obstacles():
@@ -54,11 +54,6 @@ def run_shot(play, build, shot):
 def test_laser_needs_many_hits_on_a_wreck(play):
     seen = run_shot(play, lambda: [Shipwreck(400, 200)], lambda o: Laser(o.rect.centerx, o.rect.centery))
     assert seen['obstacles'][0].hits == 1 and seen['alive']
-
-
-def test_missile_destroys_a_wreck_outright(play):
-    seen = run_shot(play, lambda: [Shipwreck(400, 200)], lambda o: Missile(o.rect.centerx, o.rect.centery))
-    assert not seen['alive']
 
 
 def test_mine_blast_chains_and_spares_distant_obstacles(play):

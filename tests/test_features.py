@@ -116,7 +116,7 @@ def test_every_area_feature_is_real_and_statues_are_atlantis_only():
     assert {area.get('feature') for area in AREAS} == {None, 'geyser', 'gate'}
     assert all('hint' in area for area in AREAS[1:])
     assert 'statue' in ENEMY_TYPES
-    assert [i for i, area in enumerate(AREAS) if 'statue' in area.get('enemies', [])] == [4]
+    assert [i for i, area in enumerate(AREAS) if 'statue' in area.get('enemies', [])] == [3, 5]
 
 
 def scene(play, area_index, script_step, frames=9000):
@@ -152,7 +152,7 @@ def test_lab_gets_gates_and_shooting_the_switch_works_in_play(play):
             seen['frames_after'] = seen.get('frames_after', 0) + 1
         return seen.get('frames_after', 0) > 1
 
-    seen = scene(play, 3, step)
+    seen = scene(play, 4, step)
     assert 'gate' in seen and not seen['gate'].switch.alive()
 
 

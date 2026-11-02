@@ -19,8 +19,6 @@ class Shark(pygame.sprite.Sprite):
 		self.speed = 5
 		# Weapon attributes
 		self.laser_energy = 100  # max 100
-		self.missiles = 3
-		self.torpedoes = 1
 		self.fire_cooldown = 0
 
 	def _create_frame(self, phase):
@@ -178,18 +176,3 @@ class Shark(pygame.sprite.Sprite):
 			return True
 		return False
 
-	def fire_missile(self):
-		if self.missiles > 0 and self.fire_cooldown <= 0:
-			self.missiles -= 1
-			self.fire_cooldown = 500
-			print("Missile fired!")
-			return True
-		return False
-
-	def fire_torpedo(self):
-		if self.torpedoes > 0 and self.fire_cooldown <= 0:
-			self.torpedoes -= 1
-			self.fire_cooldown = 800
-			print("Torpedo fired!")
-			return True
-		return False

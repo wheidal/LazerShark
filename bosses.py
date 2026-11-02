@@ -6,7 +6,7 @@ import random
 
 import pygame
 
-from boss import (BOSS_SCORE, Boss, BossPart, Hazard, HEAD_LASER_DAMAGE, HEAVY_DAMAGE, LASER_DAMAGE,
+from boss import (BOSS_SCORE, Boss, BossPart, Hazard, HEAD_LASER_DAMAGE, LASER_DAMAGE,
                   LUNGE_Y_RANGE, MorayEel, _white)
 from player_enhanced import SharkWithSprites
 
@@ -230,15 +230,15 @@ class GiantSquid(Boss):
         self.head.show(self.head.frames, (self.body_x, self.BODY_Y), flash)
         self.parts.add(self.head)
 
-    def on_shot(self, parts, heavy):
+    def on_shot(self, parts):
         tentacle_parts = [p for p in parts if hasattr(p, 'tentacle')]
         if tentacle_parts:
             tentacle = self.tentacles[tentacle_parts[0].tentacle]
-            hit = min(tentacle['hp'], (HEAVY_DAMAGE if heavy else LASER_DAMAGE) * self.shot_power)
+            hit = min(tentacle['hp'], LASER_DAMAGE * self.shot_power)
             tentacle['hp'] -= hit
             self.take_damage(hit)
         elif not self._alive():  # The head can't be hurt until its tentacles are gone
-            self.hurt(HEAVY_DAMAGE if heavy else HEAD_LASER_DAMAGE)
+            self.hurt(HEAD_LASER_DAMAGE)
 
     def targets(self):
         alive = self._alive()
@@ -262,7 +262,6 @@ class LavaCrab(Boss):
     WALK_SPEED = 2.5
     WALK_STEPS = 90
     OVERHEAT_STEPS = 170
-    ARMOUR_HEAVY_DAMAGE = 2
 
     def __init__(self, left_edge, right_edge, difficulty='normal'):
         super().__init__(left_edge, right_edge, difficulty)
@@ -344,25 +343,23 @@ class LavaCrab(Boss):
             claw.show(claw.frames, (self.x + side * 76, self.Y + 74 + bob), flash)
             self.parts.add(claw)
 
-    def on_shot(self, parts, heavy):
+    def on_shot(self, parts):
         if self.state == 'overheat':
             if self.shell in parts:
-                self.hurt(HEAVY_DAMAGE if heavy else HEAD_LASER_DAMAGE)
+                self.hurt(HEAD_LASER_DAMAGE)
             else:
-                self.hurt(HEAVY_DAMAGE if heavy else LASER_DAMAGE)
-        elif heavy:  # Lasers just bounce off the armour
-            self.hurt(self.ARMOUR_HEAVY_DAMAGE)
+                self.hurt(LASER_DAMAGE)
 
     def targets(self):
         return [self.shell]
 
 
 class RivalShark(Boss):
-    """Another cyborg shark, firing back. Shoot the lit switch to drop its shield."""
+    """Subject 14, the shark built to replace you. Shoot the lit switch to drop its shield."""
     name = "RIVAL SHARK"
     arrival = "ALERT: unknown laser signature"
     hint = "Shoot the green switch to drop its shield!"
-    health_scale = 1.6
+    health_scale = 1.9
     arena_reef = [(120, 190, 210), (70, 90, 112), (52, 62, 88), (36, 44, 70), (20, 26, 48)]
     Y = 100
     SWIM_SPEED = 3
@@ -449,12 +446,12 @@ class RivalShark(Boss):
             switch.show(switch.frames, self.switch_spots[self.lit], False)
             self.parts.add(switch)
 
-    def on_shot(self, parts, heavy):
+    def on_shot(self, parts):
         if self.shielded:
             if self.switches[self.lit] in parts:
                 self.shield_down = self.ANGRY_SHIELD_DOWN_STEPS if self.angry else self.SHIELD_DOWN_STEPS
         elif self.body in parts:
-            self.hurt(HEAVY_DAMAGE if heavy else HEAD_LASER_DAMAGE)
+            self.hurt(HEAD_LASER_DAMAGE)
 
     def touching(self, shark, collided):
         # The switches are only machinery: swimming into one does no harm
@@ -479,17 +476,16 @@ class RivalShark(Boss):
 
 
 class Guardian(Boss):
-    """The final boss. Atlantis's guardian uses every kind of attack, and opens its core after each."""
+    """Atlantis's ancient guardian, reprogrammed. It uses every attack, and opens its core after each."""
     name = "ATLANTEAN GUARDIAN"
     arrival = "The ruins are waking up..."
     hint = "Hit the core when it opens!"
-    health_scale = 2.2
+    health_scale = 1.6
     arena_reef = [(226, 206, 130), (130, 130, 110), (88, 100, 110), (52, 74, 100), (26, 44, 76)]
     Y = 110
     SWAY = 150
     OPEN_STEPS = 170
     ANGRY_OPEN_STEPS = 125
-    ARMOUR_HEAVY_DAMAGE = 2
     ATTACKS = ('beam', 'volley', 'vents')
     VOLLEY = 5
     VOLLEY_SPREAD = 70
@@ -566,11 +562,9 @@ class Guardian(Boss):
                 spots.append((random.randint(self.left_edge + 70, self.right_edge - 70), random.randint(260, 540)))
             self.hazards.add(LavaVent(spot, self.warning) for spot in spots)
 
-    def on_shot(self, parts, heavy):
+    def on_shot(self, parts):
         if self.state == 'open':
-            self.hurt(HEAVY_DAMAGE if heavy else HEAD_LASER_DAMAGE)
-        elif heavy:
-            self.hurt(self.ARMOUR_HEAVY_DAMAGE)
+            self.hurt(HEAD_LASER_DAMAGE)
 
     def targets(self):
         return [self.body]
@@ -582,11 +576,175 @@ class Guardian(Boss):
         super().draw(screen)
 
 
+class DrRask(Boss):
+    """The maker himself, in a walking mech. Its turrets shield it; then shoot the glass tank he's in."""
+    name = "DR. RASK"
+    arrival = "ALARM: intruder in the core"
+    hint = "Destroy the turrets, then shoot the glass tank!"
+    health_scale = 2.4
+    final = True
+    arena_reef = [(255, 90, 90), (96, 62, 78), (62, 50, 70), (40, 36, 58), (20, 18, 36)]
+    Y = 118
+    SWAY = 170
+    TURRET_SHARE = 0.12  # Each turret's share of the health bar
+    TURRET_OFFSET = 150
+    TURRET_FIRE_STEPS = 80
+    REST_STEPS = (60, 95)
+    DESPERATE_AT = 0.3
+    ATTACKS = ('beam', 'volley', 'vents')
+
+    def __init__(self, left_edge, right_edge, difficulty='normal'):
+        super().__init__(left_edge, right_edge, difficulty)
+        self.x = (left_edge + right_edge) / 2
+        self.body = BossPart(self._mech_art())
+        self.tank = BossPart(self._tank_art(False))
+        self.turrets = []
+        for side in (-1, 1):
+            part = BossPart(_ball(26, (150, 156, 168), (70, 76, 90), (255, 70, 60)))
+            self.turrets.append({'side': side, 'hp': int(self.max_health * self.TURRET_SHARE), 'part': part})
+        self.attack_index = 0
+        self.state = 'rest'
+        self.timer = random.randint(*self.REST_STEPS)
+        self.beam_y = 300
+
+    @property
+    def desperate(self):
+        return self.health < self.max_health * self.DESPERATE_AT
+
+    @property
+    def guarded(self):
+        return any(turret['hp'] > 0 for turret in self.turrets)
+
+    @staticmethod
+    def _mech_art():
+        def make():
+            image = pygame.Surface((270, 150), pygame.SRCALPHA)
+            for x in (6, 214):  # Legs, seen from above
+                pygame.draw.rect(image, (14, 16, 24), (x, 66, 50, 82), border_radius=8)
+                pygame.draw.rect(image, (84, 90, 104), (x + 3, 69, 44, 76), border_radius=7)
+                for y in (86, 108, 130):
+                    pygame.draw.line(image, (240, 190, 50), (x + 8, y), (x + 42, y), 3)
+            pygame.draw.polygon(image, (14, 16, 24), [(40, 18), (230, 18), (252, 84), (206, 146), (64, 146), (18, 84)])
+            pygame.draw.polygon(image, (116, 124, 138), [(44, 22), (226, 22), (247, 84), (203, 142), (67, 142), (23, 84)])
+            pygame.draw.polygon(image, (152, 160, 172), [(60, 30), (210, 30), (218, 58), (52, 58)])
+            for x, y in ((50, 40), (220, 40), (70, 128), (200, 128)):
+                pygame.draw.circle(image, (225, 230, 236), (x, y), 3)
+            return image
+        return _cached('mech', make)
+
+    @staticmethod
+    def _tank_art(cracked):
+        def make():
+            image = pygame.Surface((96, 96), pygame.SRCALPHA)
+            pygame.draw.circle(image, (14, 16, 24), (48, 48), 47)
+            pygame.draw.circle(image, (70, 180, 170), (48, 48), 44)
+            pygame.draw.circle(image, (150, 235, 215), (48, 48), 44, 3)
+            pygame.draw.rect(image, (240, 240, 240), (32, 56, 32, 26), border_radius=6)  # Lab coat
+            pygame.draw.circle(image, (232, 196, 164), (48, 44), 14)
+            for x, y in ((32, 34), (38, 28), (48, 26), (58, 28), (64, 34)):
+                pygame.draw.circle(image, (228, 228, 236), (x, y), 6)
+            for x in (42, 54):
+                pygame.draw.circle(image, (250, 250, 250), (x, 42), 5)
+                pygame.draw.circle(image, (20, 20, 30), (x, 42), 5, 2)
+                pygame.draw.circle(image, (20, 20, 30), (x, 42), 2)
+            if cracked:
+                pygame.draw.ellipse(image, (120, 30, 40), (41, 49, 14, 10))  # Screaming
+                for points in (((14, 26), (34, 42), (24, 60)), ((76, 18), (62, 40), (80, 58)),
+                               ((30, 84), (44, 66), (60, 86))):
+                    pygame.draw.lines(image, (240, 255, 255), False, points, 2)
+            else:
+                pygame.draw.line(image, (120, 40, 40), (42, 53), (54, 51), 3)  # Smirking
+            pygame.draw.arc(image, (240, 255, 255), (12, 10, 72, 72), 1.0, 2.4, 3)
+            return image
+        return _cached(('rask_tank', cracked), make)
+
+    @property
+    def attack(self):
+        return self.ATTACKS[self.attack_index % len(self.ATTACKS)]
+
+    def step(self, shark_rect):
+        self.timer -= 1
+        self.x = (self.left_edge + self.right_edge) / 2 + math.sin(self.age * 0.011) * self.SWAY
+        fire_steps = self.TURRET_FIRE_STEPS
+        if self.age % fire_steps == 0:
+            for turret in self.turrets:
+                if turret['hp'] > 0:
+                    shot = Orb(turret['part'].rect.center, shark_rect.center, (255, 90, 70), 4.2, 8)
+                    self.hazards.add(shot)
+        if self.state == 'rest' and self.timer <= 0:
+            self.state = 'wind_up'
+            self.timer = self.warning
+            self.beam_y = max(LUNGE_Y_RANGE[0] + 150, min(LUNGE_Y_RANGE[1], shark_rect.centery))
+            if self.attack == 'vents':
+                self._vents(shark_rect)
+        elif self.state == 'wind_up' and self.timer <= 0:
+            self._fire(shark_rect)
+            self.attack_index += 1
+            self.state = 'rest'
+            low, high = self.REST_STEPS
+            self.timer = random.randint(low // 2, high // 2) if self.desperate else random.randint(low, high)
+        self.parts.empty()
+        flash = self.flash > 0
+        self.body.show(self.body.frames, (self.x, self.Y), flash)
+        self.parts.add(self.body)
+        self.tank.show(self._tank_art(self.desperate), (self.x, self.Y + 6), flash)
+        self.parts.add(self.tank)
+        for turret in self.turrets:
+            if turret['hp'] > 0:
+                turret['part'].show(turret['part'].frames, (self.x + turret['side'] * self.TURRET_OFFSET, self.Y + 56), flash)
+                self.parts.add(turret['part'])
+
+    def _vents(self, shark_rect):
+        spots = [shark_rect.center]
+        for _ in range(4 if self.desperate else 2):
+            spots.append((random.randint(self.left_edge + 70, self.right_edge - 70), random.randint(260, 540)))
+        self.hazards.add(LavaVent(spot, self.warning) for spot in spots)
+
+    def _fire(self, shark_rect):
+        if self.attack == 'beam':
+            self.hazards.add(Beam(self.left_edge, self.right_edge, self.beam_y))
+        elif self.attack == 'volley':
+            count = 7 if self.desperate else 5
+            for i in range(count):
+                aim = (shark_rect.centerx + (i - count // 2) * 80, shark_rect.centery)
+                self.hazards.add(Orb((self.x, self.Y + 70), aim, (120, 255, 200), 4.5))
+
+    def on_shot(self, parts):
+        for turret in self.turrets:
+            if turret['part'] in parts and turret['hp'] > 0:
+                hit = min(turret['hp'], LASER_DAMAGE * self.shot_power)
+                turret['hp'] -= hit
+                self.take_damage(hit)
+                return
+        if self.guarded:
+            return
+        if self.tank in parts:
+            self.hurt(HEAD_LASER_DAMAGE)
+
+    def targets(self):
+        for turret in self.turrets:
+            if turret['hp'] > 0:
+                return [turret['part']]
+        return [self.tank]
+
+    def draw(self, screen):
+        if self.state == 'wind_up' and self.attack == 'beam' and self.age // 6 % 2:
+            for x in range(self.left_edge, self.right_edge, 34):
+                pygame.draw.line(screen, (255, 70, 70), (x, self.beam_y), (x + 18, self.beam_y), 3)
+        self.hazards.draw(screen)
+        screen.blit(self.body.image, self.body.rect)
+        screen.blit(self.tank.image, self.tank.rect)
+        for turret in self.turrets:
+            if turret['hp'] > 0:
+                screen.blit(turret['part'].image, turret['part'].rect)
+
+
 # Each boss and the score that summons it
 BOSS_ROSTER = [
     (MorayEel, BOSS_SCORE),
     (GiantSquid, 400),
     (LavaCrab, 800),
-    (RivalShark, 1300),
-    (Guardian, 1900),
+    (Guardian, 1300),
+    (RivalShark, 1900),
+    (DrRask, 2600),
 ]
