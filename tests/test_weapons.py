@@ -16,8 +16,8 @@ def test_collecting_swaps_and_powers_up():
     for _ in range(5):
         weapon.collect('fan')
     assert weapon.level == MAX_LEVEL
-    weapon.collect('beam')
-    assert (weapon.kind, weapon.level, weapon.label) == ('beam', 1, 'BEAM 1')
+    weapon.collect('rapid')
+    assert (weapon.kind, weapon.level, weapon.label) == ('rapid', 1, 'RAPID 1')
 
 
 def test_hits_drop_a_level_then_back_to_the_plain_laser():
@@ -36,9 +36,9 @@ def test_earning_gives_fan_or_a_level():
     weapon = WeaponState()
     weapon.earn()
     assert (weapon.kind, weapon.level) == (EARNED_WEAPON, EARNED_LEVEL)
-    weapon.collect('beam')
+    weapon.collect('rapid')
     weapon.earn()
-    assert (weapon.kind, weapon.level) == ('beam', 2)
+    assert (weapon.kind, weapon.level) == ('rapid', 2)
 
 
 @pytest.mark.parametrize('kind', WEAPONS)
@@ -115,13 +115,6 @@ def test_chum_ball_counts_for_less_than_a_laser_hit(play):
     assert not seen['shot'].alive()
 
 
-def test_beam_passes_through_and_hurts_each_obstacle_once(play):
-    seen = fire_at(play, lambda: [Shipwreck(400, 250), Shipwreck(400, 40)], bolt_for('beam'), frames=30)
-    power = WEAPONS['beam']['levels'][0]['power']
-    assert seen['targets'][0].hits == power
-    assert seen['targets'][1].hits == power
-
-
 def test_shot_power_scales_boss_damage_including_tentacles(display):
     eel = MorayEel(75, 725)
     eel.shot_power = 0.5
@@ -134,30 +127,6 @@ def test_shot_power_scales_boss_damage_including_tentacles(display):
     squid.on_shot([squid.tentacles[0]['parts'][0]], False)
     assert squid.tentacles[0]['hp'] == start - 0.5
     assert squid.health == squid.max_health - 0.5
-
-
-def test_beam_hurts_a_boss_once_per_shot(play):
-    seen = {}
-
-    def script(state, frame):
-        state['energy'] = 100
-        if frame == 1:
-            state['score'] = BOSS_ROSTER[0][1]
-        fight = state['boss']
-        if fight:
-            fight.state = 'exposed'
-            fight.timer = 9999
-            fight.y, fight.head_x = 200, 400
-            if 'shot' not in seen and fight.parts:
-                seen['start'] = fight.health
-                seen['shot'] = Bolt(400, 300, 'beam', WEAPONS['beam']['levels'][0])
-                state['projectiles'].add(seen['shot'])
-            if 'shot' in seen and not seen['shot'].alive():
-                seen['end'] = fight.health
-                return True
-
-    play(script, max_frames=6000)
-    assert seen['start'] - seen['end'] == WEAPONS['beam']['levels'][0]['power'] * 2
 
 
 def test_picking_up_a_weapon_in_the_game(play):
@@ -199,3 +168,7 @@ def test_firing_uses_the_weapon_and_a_hit_costs_a_level(play):
 def test_plain_laser_needs_no_table_entry(display):
     shots = WeaponState().fire(400, 300)
     assert len(shots) == 1 and type(shots[0]) is Laser
+
+
+def test_piercing_beam_is_gone():
+    assert 'beam' not in WEAPONS

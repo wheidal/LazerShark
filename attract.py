@@ -179,7 +179,6 @@ def _weapon_rows():
         (weapon_icon('fan'), "Fan laser", "A wide spread of shots. Great against swarms"),
         (weapon_icon('chum'), "Chum Cannon", "Sprays red plasma balls across a huge 116-degree arc"),
         (weapon_icon('rapid'), "Rapid laser", "Fires much faster, and empties your laser much faster"),
-        (weapon_icon('beam'), "Piercing beam", "A slow, heavy shot that passes through everything"),
     ]
 
 

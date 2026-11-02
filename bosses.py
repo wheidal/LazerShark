@@ -117,6 +117,7 @@ class GiantSquid(Boss):
     """Clings above the wreck. Its tentacles slam down and shield the head until they're destroyed."""
     name = "GIANT SQUID"
     arrival = "The wrecks are groaning..."
+    hint = "Shoot off the tentacles to reach its head!"
     health_scale = 1.3
     arena_reef = [(112, 118, 112), (88, 72, 62), (62, 58, 60), (40, 48, 62), (22, 32, 52)]
     TENTACLES = 4
@@ -254,6 +255,7 @@ class LavaCrab(Boss):
     """Armoured until it overheats. Vents erupt around you, then its shell opens to cool down."""
     name = "MAGMA CRAB"
     arrival = "The water is getting hot..."
+    hint = "Hit it when its shell opens!"
     health_scale = 1.5
     arena_reef = [(230, 110, 40), (128, 52, 34), (72, 40, 40), (46, 34, 44), (24, 22, 36)]
     Y = 110
@@ -359,6 +361,7 @@ class RivalShark(Boss):
     """Another cyborg shark, firing back. Shoot the lit switch to drop its shield."""
     name = "RIVAL SHARK"
     arrival = "ALERT: unknown laser signature"
+    hint = "Shoot the green switch to drop its shield!"
     health_scale = 1.6
     arena_reef = [(120, 190, 210), (70, 90, 112), (52, 62, 88), (36, 44, 70), (20, 26, 48)]
     Y = 100
@@ -479,6 +482,7 @@ class Guardian(Boss):
     """The final boss. Atlantis's guardian uses every kind of attack, and opens its core after each."""
     name = "ATLANTEAN GUARDIAN"
     arrival = "The ruins are waking up..."
+    hint = "Hit the core when it opens!"
     health_scale = 2.2
     arena_reef = [(226, 206, 130), (130, 130, 110), (88, 100, 110), (52, 74, 100), (26, 44, 76)]
     Y = 110
