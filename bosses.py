@@ -360,6 +360,7 @@ class RivalShark(Boss):
     arrival = "ALERT: unknown laser signature"
     hint = "Shoot the green switch to drop its shield!"
     health_scale = 1.9
+    health_bonus = 1  # Hard enough already
     arena_reef = [(120, 190, 210), (70, 90, 112), (52, 62, 88), (36, 44, 70), (20, 26, 48)]
     Y = 100
     SWIM_SPEED = 3

@@ -13,8 +13,11 @@ from channel import SCROLL_PER_STEP
 from obstacle import SeaMine, _finish
 
 # How often enemies arrive and how many may be about, by difficulty
-ENEMY_SPAWN_MS = {'easy': 4500, 'normal': 3200, 'hard': 2200}
-ENEMY_LIMIT = {'easy': 2, 'normal': 3, 'hard': 5}
+ENEMY_SPAWN_MS = {'easy': 4500, 'normal': 2900, 'hard': 2000}
+ENEMY_LIMIT = {'easy': 2, 'normal': 4, 'hard': 6}
+# Each area further along the journey makes enemies this much tougher, and sends them this much sooner
+TOUGHNESS_PER_AREA = 0.08
+SPAWN_SPEEDUP_PER_AREA = 0.05
 SCREEN = pygame.Rect(0, 0, 800, 600)
 OFF_SCREEN = SCREEN.inflate(240, 240)
 OFF_BOTTOM = 620
@@ -114,6 +117,7 @@ class KamikazeTuna(Enemy):
     WIDTH, HEIGHT = 40, 70
     kind = 'tuna'
     name = "Kamikaze Tuna"
+    toughness = 2
     damage = 20
     reward = 2
     blast_radius = 95
@@ -217,7 +221,7 @@ class LaserManta(Enemy):
     kind = 'manta'
     name = "Laser Manta"
     min_score = 20
-    toughness = 4
+    toughness = 5
     damage = 20
     reward = 6
     counts_for_rewards = True
@@ -370,7 +374,7 @@ class EvilSub(Enemy):
     kind = 'evil_sub'
     name = "Evil Sub"
     min_score = 85
-    toughness = 14
+    toughness = 16
     damage = 33
     reward = 12
     counts_for_rewards = True
@@ -462,7 +466,7 @@ class GuardianStatue(Enemy):
     WIDTH, HEIGHT = 70, 70
     kind = 'statue'
     name = "Guardian Statue"
-    toughness = 7
+    toughness = 8
     damage = 25
     reward = 7
     counts_for_rewards = True
@@ -489,6 +493,16 @@ class GuardianStatue(Enemy):
 
 ENEMY_TYPES = {cls.kind: cls for cls in (KamikazeTuna, LaserManta, Barracuda, EvilSub, RadioactivePiranha,
                                          GuardianStatue)}
+
+
+def enemy_spawn_ms(difficulty, area_index):
+    return ENEMY_SPAWN_MS[difficulty] * (1 - SPAWN_SPEEDUP_PER_AREA) ** area_index
+
+
+def toughen(enemies, area_index):
+    """Make freshly spawned enemies as tough as this far along the journey calls for."""
+    for enemy in enemies:
+        enemy.toughness = round(enemy.toughness * (1 + TOUGHNESS_PER_AREA * area_index))
 
 
 def choose_enemy(kinds, score):

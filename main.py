@@ -10,7 +10,7 @@ import os
 import math
 from player import Shark
 from player_enhanced import SharkWithSprites
-from obstacle import OBSTACLE_TYPES
+from obstacle import OBSTACLE_TYPES, SeaMine, _distance_to_rect
 from food import SmallFish, ZombieFish
 from powerup import LaserPowerup, ShieldPowerup
 from particle import ParticleEmitter
@@ -33,7 +33,7 @@ from shark_look import SharkLook
 from attract import AttractMode, Briefing
 from boss import CONTACT_INVULN_MS, DEFAULT_DIFFICULTY, DIFFICULTIES, LASER_RECHARGE, VICTORY_SCORE
 from bosses import BOSS_ROSTER
-from enemies import ENEMY_LIMIT, ENEMY_SPAWN_MS, Enemy, choose_enemy
+from enemies import ENEMY_LIMIT, Enemy, choose_enemy, enemy_spawn_ms, toughen
 from weapons import OBSTACLES_FOR_UPGRADE, UPGRADE_SPAWN_MS, WeaponPowerup, WeaponState
 
 # The simulation always advances in 60 Hz steps, so game speed doesn't depend on frame rate
@@ -621,6 +621,8 @@ def main():
             enemy_shots.update()
             drains.update()
             for sprite in obstacles.sprites():
+                if isinstance(sprite, SeaMine):
+                    sprite.sense(shark.rect)
                 if getattr(sprite, 'leaking', False):  # A barrel left too long
                     cloud = RadiationCloud(sprite.rect.center)
                     drains.add(cloud)
@@ -739,7 +741,7 @@ def main():
 
             # Spawn enemies, up to the limit for this difficulty
             enemy_timer += dt
-            if enemy_timer > ENEMY_SPAWN_MS[difficulty] and boss_phase not in ('approach', 'fight'):
+            if enemy_timer > enemy_spawn_ms(difficulty, next_boss) and boss_phase not in ('approach', 'fight'):
                 enemy_timer = 0
                 on_screen = sum(isinstance(sprite, Enemy) for sprite in obstacles)
                 kind = choose_enemy(channel.enemy_kinds(), score)
@@ -747,6 +749,7 @@ def main():
                     spawn_x = channel.spawn_x(kind.WIDTH, blocking=True, height=kind.HEIGHT)
                     if spawn_x is not None:
                         new_enemies = kind.create(spawn_x, shark.rect)
+                        toughen(new_enemies, next_boss)
                         obstacles.add(new_enemies)
                         all_sprites.add(new_enemies)
 
@@ -982,7 +985,10 @@ def main():
 
             # A mine's blast clears the obstacles around it, which can set off other mines.
             # One the shark touched has already cost it energy, so its blast spares the shark.
-            queue = destroyed + blown_up
+            # A mine that sensed the shark and went off by itself earns nothing
+            self_detonated = [sprite for sprite in obstacles
+                              if isinstance(sprite, SeaMine) and sprite.fuse_done and sprite not in destroyed]
+            queue = destroyed + blown_up + self_detonated
             while queue:
                 obs = queue.pop(0)
                 obs.kill()
@@ -994,7 +1000,8 @@ def main():
                         if nearby not in destroyed and center.distance_to(nearby.rect.center) <= obs.blast_radius:
                             destroyed.append(nearby)
                             queue.append(nearby)
-                    if obs not in blown_up and center.distance_to(shark.rect.center) <= obs.blast_radius:
+                    ending_sounds['blast'].play()
+                    if obs not in blown_up and _distance_to_rect(obs.rect.center, shark.rect) <= obs.blast_radius:
                         if shield_active and shield_strength > 0:
                             shield_strength -= obs.blast_damage
                             if shield_strength <= 0:
@@ -1003,7 +1010,7 @@ def main():
                         else:
                             energy -= obs.blast_damage
                             graphics_enhancer.trigger_damage_effect()
-                if obs in blown_up:
+                if obs in blown_up or obs in self_detonated:
                     continue
                 emitter.emit(obs.rect.center, color=obs.debris_color, count=18, size=8, speed=4, lifetime=24)
                 print(f"{obs.name} destroyed!")
@@ -1181,7 +1188,7 @@ def main():
         shark_look.draw_shield(screen, shark.rect.center, shield_strength if shield_active else 0,
                                pygame.time.get_ticks(), frame_ms, fading=shield_timer > SHIELD_MS - SHIELD_FADING_MS)
         for sprite in obstacles:
-            if isinstance(sprite, Enemy):
+            if isinstance(sprite, (Enemy, SeaMine)):
                 sprite.draw_warning(screen)
         particles.draw(screen)
         enhanced_particles.draw(screen)

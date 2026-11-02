@@ -35,6 +35,13 @@ def _cached(key, make):
 	return _art_cache[key]
 
 
+def _distance_to_rect(point, rect):
+	"""How far a point is from the nearest edge of a rect."""
+	dx = max(rect.left - point[0], 0, point[0] - rect.right)
+	dy = max(rect.top - point[1], 0, point[1] - rect.bottom)
+	return math.hypot(dx, dy)
+
+
 def _coral_head(variant):
 	rng = random.Random(variant)
 	art = pygame.Surface((78, 62), pygame.SRCALPHA)
@@ -151,7 +158,7 @@ def _mine(lit):
 
 
 class SeaMine(pygame.sprite.Sprite):
-	"""Goes off when shot or touched, taking nearby obstacles with it."""
+	"""Senses a shark that comes close, blinks, and goes off. Shoot it from outside the blast."""
 	WIDTH, HEIGHT = 50, 51
 	kind = 'mine'
 	name = "Sea Mine"
@@ -160,7 +167,10 @@ class SeaMine(pygame.sprite.Sprite):
 	reward = 3
 	counts_for_rewards = True
 	blast_radius = 130
-	blast_damage = 20  # To a shark caught too close when a mine is shot
+	blast_damage = 30  # To a shark caught in the blast, however the mine was set off
+	SENSE_RADIUS = 95
+	FUSE_STEPS = 36
+	ARMED_BLINK_STEPS = 3
 	drops_pickup = False
 	bursts_on_coast = False
 	debris_color = (255, 170, 60)
@@ -174,10 +184,27 @@ class SeaMine(pygame.sprite.Sprite):
 		self.rect = self.image.get_rect(midtop=(x, y))
 		self.hits = 0
 		self.age = random.randrange(self.BLINK_STEPS)
+		self.fuse = None  # Steps until it goes off, once it has sensed the shark
+		self.fuse_done = False
+
+	def sense(self, shark_rect):
+		"""The game calls this with the shark's position each step."""
+		if self.fuse is None and _distance_to_rect(self.rect.center, shark_rect) <= self.SENSE_RADIUS:
+			self.fuse = self.FUSE_STEPS
 
 	def update(self):
 		self.age += 1
-		self.image = self.frames[(self.age // self.BLINK_STEPS) % 2]
+		if self.fuse is None:
+			self.image = self.frames[(self.age // self.BLINK_STEPS) % 2]
+			return
+		self.fuse -= 1
+		self.image = self.frames[(self.age // self.ARMED_BLINK_STEPS) % 2]
+		self.fuse_done = self.fuse <= 0
+
+	def draw_warning(self, screen):
+		"""An armed mine shows how far its blast will reach."""
+		if self.fuse is not None and self.age // self.ARMED_BLINK_STEPS % 2:
+			pygame.draw.circle(screen, (255, 70, 50), self.rect.center, self.blast_radius, 2)
 
 	@classmethod
 	def create(cls, x):

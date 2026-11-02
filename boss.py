@@ -121,6 +121,7 @@ class Boss:
     health_scale = 1
     arena_reef = None  # Colours for this boss's arena, if it has its own
     final = False  # Beating this one ends the game
+    health_bonus = 1.15  # Applied on top of the level's range and health_scale
 
     def __init__(self, left_edge, right_edge, difficulty=DEFAULT_DIFFICULTY):
         ranges = DIFFICULTIES.get(difficulty, DIFFICULTIES[DEFAULT_DIFFICULTY])
@@ -128,7 +129,7 @@ class Boss:
         self.warn_steps = random.randint(*ranges['warn_steps'])
         self.left_edge = left_edge
         self.right_edge = right_edge
-        self.health = self.max_health = int(random.randint(*ranges['health']) * self.health_scale)
+        self.health = self.max_health = int(random.randint(*ranges['health']) * self.health_scale * self.health_bonus)
         self.parts = pygame.sprite.Group()
         self.hazards = pygame.sprite.Group()
         self.age = 0
