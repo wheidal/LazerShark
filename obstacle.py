@@ -355,7 +355,177 @@ class RadiationBarrel(pygame.sprite.Sprite):
 		return [cls(x, -cls.HEIGHT)]
 
 
-OBSTACLE_TYPES = {cls.kind: cls for cls in (CoralReef, Shipwreck, SeaMine, Jellyfish, EmpJellyfish, RadiationBarrel)}
+class _SolidObstacle(pygame.sprite.Sprite):
+	"""A plain obstacle, for the kinds that need only their own numbers and art."""
+	WIDTH, HEIGHT = 80, 80
+	toughness = 3
+	damage = 33
+	reward = 3
+	counts_for_rewards = True
+	blast_radius = 0
+	blast_damage = 0
+	drops_pickup = False
+	bursts_on_coast = False
+	debris_color = (180, 180, 180)
+
+	def __init__(self, x, y):
+		super().__init__()
+		self.image = _cached(self.kind, self._art)
+		self.mask = pygame.mask.from_surface(self.image, 127)
+		self.rect = self.image.get_rect(midtop=(x, y))
+		self.hits = 0
+
+	@classmethod
+	def create(cls, x):
+		return [cls(x, -cls.HEIGHT)]
+
+
+def _boulder():
+	art = pygame.Surface((84, 74), pygame.SRCALPHA)
+	pygame.draw.polygon(art, (70, 72, 78), [(6, 44), (18, 12), (48, 2), (76, 18), (82, 50), (58, 72), (20, 68)])
+	pygame.draw.polygon(art, (116, 118, 122), [(16, 40), (24, 18), (48, 9), (68, 22), (70, 44), (52, 60), (26, 58)])
+	pygame.draw.lines(art, (58, 60, 66), False, [(30, 22), (40, 38), (34, 54)], 2)
+	pygame.draw.lines(art, (58, 60, 66), False, [(52, 16), (56, 34), (66, 42)], 2)
+	return _finish(art)
+
+
+class Boulder(_SolidObstacle):
+	"""A fallen lump of reef. Slow to shoot through."""
+	WIDTH, HEIGHT = 90, 80
+	kind = 'boulder'
+	name = "Boulder"
+	toughness = 8
+	reward = 5
+	debris_color = (130, 130, 135)
+	_art = staticmethod(_boulder)
+
+
+def _rock():
+	art = pygame.Surface((54, 50), pygame.SRCALPHA)
+	pygame.draw.polygon(art, (82, 66, 58), [(4, 26), (16, 4), (40, 2), (52, 22), (42, 46), (14, 46)])
+	pygame.draw.polygon(art, (132, 106, 88), [(12, 25), (20, 10), (38, 9), (44, 22), (36, 38), (18, 38)])
+	return _finish(art)
+
+
+class TumblingRock(_SolidObstacle):
+	"""Rolls from side to side down the slope."""
+	SWAY = 70
+	SWAY_SPEED = 0.035
+	WIDTH, HEIGHT = 200, 60
+	kind = 'tumbling_rock'
+	name = "Tumbling Rock"
+	toughness = 3
+	damage = 25
+	debris_color = (150, 120, 100)
+	_art = staticmethod(_rock)
+
+	def __init__(self, x, y):
+		super().__init__(x, y)
+		self.home_x = x
+		self.age = random.randrange(180)
+
+	def update(self):
+		self.age += 1
+		self.rect.centerx = self.home_x + int(math.sin(self.age * self.SWAY_SPEED) * self.SWAY)
+
+
+def _satellite():
+	art = pygame.Surface((70, 36), pygame.SRCALPHA)
+	for x in (0, 48):
+		pygame.draw.rect(art, (40, 70, 130), (x, 6, 22, 24))
+		for y in (12, 18, 24):
+			pygame.draw.line(art, (120, 170, 220), (x, y), (x + 21, y))
+	pygame.draw.rect(art, (200, 190, 130), (24, 8, 22, 20), border_radius=3)
+	pygame.draw.circle(art, (240, 80, 70), (35, 18), 3)
+	return _finish(art)
+
+
+class Satellite(TumblingRock):
+	"""Space junk, still drifting about down here."""
+	WIDTH, HEIGHT = 220, 50
+	kind = 'satellite'
+	name = "Dead Satellite"
+	toughness = 2
+	damage = 15
+	debris_color = (120, 170, 220)
+	_art = staticmethod(_satellite)
+
+
+def _rocket():
+	art = pygame.Surface((62, 164), pygame.SRCALPHA)
+	pygame.draw.polygon(art, (214, 214, 220), [(31, 0), (50, 34), (50, 134), (12, 134), (12, 34)])
+	for y in (52, 94):
+		pygame.draw.rect(art, (40, 40, 46), (12, y, 38, 7))
+	pygame.draw.polygon(art, (210, 60, 50), [(12, 112), (0, 150), (12, 134)])
+	pygame.draw.polygon(art, (210, 60, 50), [(50, 112), (62, 150), (50, 134)])
+	pygame.draw.rect(art, (70, 72, 80), (20, 134, 22, 16))
+	pygame.draw.circle(art, (70, 150, 200), (31, 40), 7)
+	for spot in ((22, 74), (40, 120), (24, 106), (38, 62)):
+		pygame.draw.circle(art, (160, 90, 50), spot, 4)
+	return _finish(art)
+
+
+class RocketHulk(_SolidObstacle):
+	"""A long-lost rocket on the seabed."""
+	WIDTH, HEIGHT = 70, 172
+	kind = 'rocket'
+	name = "Rocket Hulk"
+	toughness = 6
+	reward = 5
+	debris_color = (210, 210, 215)
+	_art = staticmethod(_rocket)
+
+
+def _tower():
+	art = pygame.Surface((168, 104), pygame.SRCALPHA)
+	pygame.draw.rect(art, (92, 98, 106), (2, 2, 164, 100), border_radius=2)
+	pygame.draw.rect(art, (124, 130, 136), (8, 8, 152, 88))
+	for x in range(16, 150, 26):
+		for y in (16, 42, 68):
+			lit = (x + y) % 5 == 0
+			pygame.draw.rect(art, (235, 210, 110) if lit else (34, 46, 62), (x, y, 16, 16))
+	pygame.draw.polygon(art, (0, 0, 0, 0), [(120, 0), (168, 0), (168, 44)])
+	return _finish(art)
+
+
+class CollapsedTower(_SolidObstacle):
+	"""An office block on its side across the street."""
+	WIDTH, HEIGHT = 172, 110
+	kind = 'tower'
+	name = "Collapsed Tower"
+	toughness = 7
+	reward = 6
+	debris_color = (150, 155, 160)
+	_art = staticmethod(_tower)
+
+
+def _net():
+	art = pygame.Surface((126, 66), pygame.SRCALPHA)
+	color = (214, 206, 170)
+	for x in range(0, 127, 14):
+		pygame.draw.line(art, color, (x, 0), (x + 10, 65), 2)
+		pygame.draw.line(art, color, (x + 10, 0), (x, 65), 2)
+	for x in (0, 62, 124):
+		pygame.draw.circle(art, (232, 120, 60), (min(x, 122), 3), 3)
+	return art
+
+
+class FishingNet(_SolidObstacle):
+	"""Doesn't hurt, but swimming into one tangles the shark for a moment. Shoot it away."""
+	WIDTH, HEIGHT = 130, 70
+	kind = 'net'
+	name = "Fishing Net"
+	toughness = 2
+	damage = 0
+	reward = 1
+	counts_for_rewards = False
+	debris_color = (214, 206, 170)
+	slows_ms = 2500
+	_art = staticmethod(_net)
+
+
+OBSTACLE_TYPES = {cls.kind: cls for cls in (CoralReef, Shipwreck, SeaMine, Jellyfish, EmpJellyfish, RadiationBarrel,
+											Boulder, TumblingRock, Satellite, RocketHulk, CollapsedTower, FishingNet)}
 
 
 class ReefSegment(pygame.sprite.Sprite):

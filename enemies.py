@@ -491,8 +491,166 @@ class GuardianStatue(Enemy):
         self.move_to_pos()
 
 
+def _puffer_art(puffed):
+    size = 58 if puffed else 34
+    art = pygame.Surface((size, size), pygame.SRCALPHA)
+    center = size // 2
+    radius = center - 5
+    for i in range(12):
+        angle = i * math.tau / 12
+        tip = (center + math.cos(angle) * (center - 1), center + math.sin(angle) * (center - 1))
+        pygame.draw.line(art, (240, 230, 190), (center, center), tip, 2)
+    pygame.draw.circle(art, (232, 190, 70), (center, center), radius)
+    pygame.draw.circle(art, (250, 236, 170), (center, center + 2), radius - 5)
+    for x in (center - 6, center + 6):
+        pygame.draw.circle(art, (20, 20, 24), (x, center + 3), 3)
+    return _finish(art)
+
+
+class Pufferfish(Enemy):
+    """Drifts towards the shark, swells when close, then bursts into spines. Kill it from range."""
+    WIDTH, HEIGHT = 60, 60
+    kind = 'puffer'
+    name = "Pufferfish"
+    min_score = 25
+    toughness = 3
+    damage = 15
+    reward = 3
+    debris_color = (240, 210, 110)
+    SPEED = 1.7
+    SWELL_AT = 135
+    SWELL_STEPS = 40
+    SPINES = 8
+    SPINE_DAMAGE = 10
+
+    def __init__(self, x, y, shark_rect):
+        self.frames = [_cached(('puffer', puffed), lambda: _puffer_art(puffed)) for puffed in (False, True)]
+        super().__init__(x, y, shark_rect, self.frames[0])
+        self.swell_left = None
+
+    def update(self):
+        to_shark = pygame.math.Vector2(self.shark_rect.center) - self.pos
+        if self.swell_left is None:
+            if to_shark.length() > 1:
+                self.pos += to_shark.normalize() * self.SPEED
+            if to_shark.length() < self.SWELL_AT:
+                self.swell_left = self.SWELL_STEPS
+                self.set_image(self.frames[True])
+        else:
+            self.swell_left -= 1
+            if self.swell_left == 0:
+                for i in range(self.SPINES):
+                    angle = i * math.tau / self.SPINES
+                    aim = (self.pos.x + math.cos(angle) * 100, self.pos.y + math.sin(angle) * 100)
+                    spine = Orb(self.pos, aim, (240, 230, 190), 4.5, 6)
+                    spine.damage = self.SPINE_DAMAGE
+                    self.new_shots.append(spine)
+            elif self.swell_left < 0:  # Gone, once the game has collected its spines
+                self.kill()
+        self.move_to_pos()
+
+
+def _hammerhead_art():
+    art = pygame.Surface((110, 48), pygame.SRCALPHA)
+    pygame.draw.polygon(art, (84, 96, 112), [(0, 24), (22, 14), (20, 34)])  # Tail
+    pygame.draw.ellipse(art, (112, 124, 140), (14, 12, 76, 24))
+    pygame.draw.polygon(art, (84, 96, 112), [(46, 14), (60, 2), (64, 14)])
+    pygame.draw.rect(art, (130, 142, 156), (84, 0, 14, 48), border_radius=5)
+    for y in (6, 42):
+        pygame.draw.circle(art, (250, 60, 50), (92, y), 3)
+    return _finish(art)
+
+
+class Hammerhead(Enemy):
+    """Armoured brute. A red line warns of its charge across the whole channel at the shark's height."""
+    WIDTH, HEIGHT = 60, 60
+    kind = 'hammerhead'
+    name = "Hammerhead"
+    min_score = 60
+    toughness = 10
+    damage = 25
+    reward = 8
+    counts_for_rewards = True
+    debris_color = (130, 142, 156)
+    WARN_STEPS = 55
+    SPEED = 11
+
+    def __init__(self, x, y, shark_rect):
+        image = _cached('hammerhead', _hammerhead_art)
+        self.direction = random.choice([-1, 1])
+        if self.direction < 0:
+            image = _cached('hammerhead_left', lambda: pygame.transform.flip(_hammerhead_art(), True, False))
+        lane = max(150, min(540, shark_rect.centery))
+        super().__init__(-70 if self.direction > 0 else SCREEN.right + 70, lane, shark_rect, image)
+        self.warn_left = self.WARN_STEPS
+
+    def update(self):
+        self.age += 1
+        if self.warn_left > 0:
+            self.warn_left -= 1
+        else:
+            self.pos.x += self.direction * self.SPEED
+        self.move_to_pos()
+
+    def draw_warning(self, screen):
+        if self.warn_left > 0 and self.age // 5 % 2:
+            for x in range(0, SCREEN.right, 34):
+                pygame.draw.line(screen, (255, 70, 60), (x, self.pos.y), (x + 18, self.pos.y), 3)
+
+
+def _angler_art():
+    art = pygame.Surface((60, 78), pygame.SRCALPHA)
+    pygame.draw.line(art, (60, 74, 90), (30, 38), (30, 16), 2)
+    lure = pygame.Surface((22, 22), pygame.SRCALPHA)
+    points = [(11 + math.cos(i * math.pi / 3 + math.pi / 6) * 10, 11 + math.sin(i * math.pi / 3 + math.pi / 6) * 10)
+              for i in range(6)]
+    pygame.draw.polygon(lure, (255, 220, 40), points)  # Looks very like an upgrade
+    art.blit(lure, (19, 0))
+    pygame.draw.ellipse(art, (26, 40, 56), (4, 30, 52, 44))
+    pygame.draw.ellipse(art, (42, 60, 76), (10, 34, 40, 28))
+    for x in (12, 22, 32, 42):
+        pygame.draw.polygon(art, (240, 240, 225), [(x, 62), (x + 6, 62), (x + 3, 72)])
+    pygame.draw.circle(art, (250, 240, 150), (20, 44), 4)
+    pygame.draw.circle(art, (250, 240, 150), (40, 44), 4)
+    return art
+
+
+class Anglerfish(Enemy):
+    """Hides on the seabed behind a lure that looks like an upgrade, and snaps at whatever comes close."""
+    WIDTH, HEIGHT = 66, 84
+    kind = 'angler'
+    name = "Anglerfish"
+    min_score = 40
+    toughness = 4
+    damage = 30
+    reward = 6
+    counts_for_rewards = True
+    debris_color = (60, 90, 110)
+    SNAP_AT = 115
+    SNAP_SPEED = 7
+    SNAP_STEPS = 24
+
+    def __init__(self, x, y, shark_rect):
+        super().__init__(x, y, shark_rect, _cached('angler', _angler_art))
+        self.snap_left = None
+        self.heading = pygame.math.Vector2(0, 1)
+
+    def update(self):
+        self.pos.y += SCROLL_PER_STEP
+        to_shark = pygame.math.Vector2(self.shark_rect.center) - self.pos
+        if self.snap_left is None and to_shark.length() < self.SNAP_AT:
+            self.snap_left = self.SNAP_STEPS
+            self.heading = to_shark.normalize() if to_shark.length() else self.heading
+        elif self.snap_left:
+            self.snap_left -= 1
+            self.pos += self.heading * self.SNAP_SPEED
+        self.move_to_pos()
+
+
 ENEMY_TYPES = {cls.kind: cls for cls in (KamikazeTuna, LaserManta, Barracuda, EvilSub, RadioactivePiranha,
-                                         GuardianStatue)}
+                                         GuardianStatue, Pufferfish, Hammerhead, Anglerfish)}
+# Switched off to see if the game is better without them. Empty this to bring them back.
+DISABLED_ENEMIES = {'tuna'}
 
 
 def enemy_spawn_ms(difficulty, area_index):
@@ -507,5 +665,5 @@ def toughen(enemies, area_index):
 
 def choose_enemy(kinds, score):
     """A kind of enemy allowed at this score, or None."""
-    allowed = [kind for kind in kinds if ENEMY_TYPES[kind].min_score <= score]
+    allowed = [kind for kind in kinds if ENEMY_TYPES[kind].min_score <= score and kind not in DISABLED_ENEMIES]
     return ENEMY_TYPES[random.choice(allowed)] if allowed else None

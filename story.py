@@ -17,6 +17,8 @@ AREA_TAUNTS = {
     "Atlantis": "Ten thousand years of guardians. I reprogrammed them in a weekend.",
     "The Sunken Lab": "You came home! Let me show you what I built to replace you.",
     "The Lab Core": "This is MY lab! I made you! Guards! GUARDS!",
+    "The Flooded City": "I had the whole city flooded for the extra lab space. Worth it.",
+    "The NASA Graveyard": "I bought all this at auction. The rockets, I mean. Not the astronauts.",
 }
 BOSS_TAUNTS = {
     "GIANT MORAY": "My eel has been very hungry, and you are very slow.",

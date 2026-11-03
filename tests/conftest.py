@@ -11,8 +11,21 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pygame
 
+import channel
+import enemies
 import main as game
 import settings_manager
+
+
+# What's switched off in the real game, for the tests that check it. Other tests want everything on.
+SWITCHED_OFF_ENEMIES = set(enemies.DISABLED_ENEMIES)
+WHIRLPOOLS_NORMALLY_ON = channel.WHIRLPOOLS_ON
+
+
+@pytest.fixture(autouse=True)
+def everything_switched_on(monkeypatch):
+    monkeypatch.setattr(enemies, 'DISABLED_ENEMIES', set())
+    monkeypatch.setattr(channel, 'WHIRLPOOLS_ON', True)
 
 
 class Finished(Exception):

@@ -21,7 +21,8 @@ from graphics_enhancements import (
 from settings_manager import SettingsManager
 from resources import resource_path
 from channel import ChannelDirector, BANK_DAMAGE, BANK_INVULN_MS, BANK_PUSH
-from hazards import RadiationCloud, SMALL_CLOUD_RADIUS, SMALL_CLOUD_STEPS, WHIRLPOOL_SPAWN_MS, Whirlpool
+from hazards import (FIELD_SPAWN_MS, FIELD_TYPES, RadiationCloud, SMALL_CLOUD_RADIUS, SMALL_CLOUD_STEPS,
+                     WHIRLPOOL_SPAWN_MS, Whirlpool)
 from areas import area_for
 from giant_wreck import GiantWreck, H as WRECK_H, SPAWN_EVERY_MS as WRECK_EVERY_MS, W as WRECK_W
 from features import GEYSER_HEIGHT, GEYSER_WIDTH, LaserGate, LavaGeyser
@@ -39,6 +40,8 @@ from weapons import OBSTACLES_FOR_UPGRADE, UPGRADE_SPAWN_MS, WeaponPowerup, Weap
 # The simulation always advances in 60 Hz steps, so game speed doesn't depend on frame rate
 STEP_MS = 1000 / 60
 MAX_STEPS_PER_FRAME = 5
+SHARK_SPEED = 5
+SLOWED_SPEED = 2.5
 LASER_CELL_MS = 6000
 LASER_CELL_FIGHT_MS = 4000
 SHIELD_MS = 20000
@@ -395,6 +398,8 @@ def main():
     powerups = pygame.sprite.Group()
     enemy_shots = pygame.sprite.Group()
     drains = pygame.sprite.Group()
+    field_timer = 0
+    slow_timer = 0
     wreck_timer = 0
     banner_next = None
     banner_after = None
@@ -491,6 +496,8 @@ def main():
                 powerups.empty()
                 enemy_shots.empty()
                 drains.empty()
+                field_timer = 0
+                slow_timer = 0
                 wreck_timer = 0
                 banner_next = None
                 banner_after = None
@@ -676,6 +683,19 @@ def main():
                 banks.add(new_banks)
                 all_sprites.add(new_banks)
 
+            # Partway to a boss, the journey can pass through somewhere else
+            if boss_phase not in ('approach', 'fight') and next_boss < len(BOSS_ROSTER) and channel.zone != 'arena':
+                previous_score = BOSS_ROSTER[next_boss - 1][1] if next_boss else 0
+                progress = (score - previous_score) / (BOSS_ROSTER[next_boss][1] - previous_score)
+                here = area_for(next_boss, progress)
+                if progress < 1 and here is not channel.area:  # At the boss score, stay put for the fight
+                    channel.set_area(here)
+                    graphics_enhancer.set_area_tint(here.get('tint'))
+                    banner = f"Entering {here['name']}"
+                    banner_timer = 3000
+                    banner_next = here.get('hint')
+                    radio.say(AREA_TAUNTS.get(here['name']))
+
             # Reaching the boss score opens up the arena ahead
             if boss_phase != 'approach' and boss_phase != 'fight' and next_boss < len(BOSS_ROSTER):
                 boss_class, boss_score = BOSS_ROSTER[next_boss]
@@ -791,6 +811,19 @@ def main():
                     obstacles.add(gate.switch)
                     all_sprites.add(gate, gate.switch)
 
+            # Patches of ink, sludge and magnetism drift in where the area has them
+            field_timer += dt
+            if field_timer > FIELD_SPAWN_MS and boss_phase not in ('approach', 'fight'):
+                field_timer = 0
+                if channel.field_kinds():
+                    kind = FIELD_TYPES[random.choice(channel.field_kinds())]
+                    spawn_x = channel.spawn_x(kind.WIDTH, blocking=True, height=kind.HEIGHT)
+                    if spawn_x is not None:
+                        field = kind(spawn_x, -kind.HEIGHT)
+                        drains.add(field)
+                        if not field.covers:
+                            all_sprites.add(field)
+
             # Whirlpools open up where there's room to swim around them
             whirlpool_timer += dt
             if whirlpool_timer > WHIRLPOOL_SPAWN_MS[difficulty] and boss_phase not in ('approach', 'fight'):
@@ -834,6 +867,8 @@ def main():
                     shield_active = False
                     shield_strength = 0
                     shield_timer = 0
+            slow_timer = max(0, slow_timer - dt)
+            shark.speed = SLOWED_SPEED if slow_timer > 0 else SHARK_SPEED
             energy_before_hits = energy
             shield_before_hits = shield_strength if shield_active else 0
 
@@ -842,6 +877,8 @@ def main():
             blown_up = []
             hit = pygame.sprite.spritecollide(shark, obstacles, False, pixels_touch)
             if hit:
+                if any(getattr(obstacle, 'slows_ms', 0) for obstacle in hit):
+                    slow_timer = max(getattr(obstacle, 'slows_ms', 0) for obstacle in hit)
                 if any(getattr(obstacle, 'jams_laser_ms', 0) for obstacle in hit):
                     laser_jam = max(getattr(obstacle, 'jams_laser_ms', 0) for obstacle in hit)
                 if shield_active and shield_strength > 0:
@@ -1110,6 +1147,8 @@ def main():
                 energy -= drained
                 if isinstance(hazard, RadiationCloud) and drained and random.random() < 0.2:
                     emitter.emit(shark.rect.center, color=(150,255,90), count=2, size=5, speed=3, lifetime=14)
+                if getattr(hazard, 'slows_shark', None) and hazard.slows_shark(shark.rect):
+                    slow_timer = max(slow_timer, 300)
                 pull_x, pull_y = hazard.pull_on(shark.rect)
                 shark.rect.move_ip(round(pull_x), round(pull_y))
             shark.rect.clamp_ip(screen.get_rect())
@@ -1185,6 +1224,9 @@ def main():
         
         all_sprites.draw(screen)
         shark_look.draw_shark(screen, shark, weapon.kind, frame_ms)
+        for field in drains:
+            if getattr(field, 'covers', False):
+                screen.blit(field.image, field.rect)
         shark_look.draw_shield(screen, shark.rect.center, shield_strength if shield_active else 0,
                                pygame.time.get_ticks(), frame_ms, fading=shield_timer > SHIELD_MS - SHIELD_FADING_MS)
         for sprite in obstacles:

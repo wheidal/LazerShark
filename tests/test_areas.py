@@ -169,7 +169,9 @@ def test_a_graveyard_run_keeps_things_out_of_the_hull_and_loot_inside_reachable(
     def script(state, frame):
         state['energy'] = 100
         if frame == 1:
+            state['next_boss'] = 1
             state['channel'].set_area(AREAS[1])
+        state['score'] = 0  # Stays in the Graveyard
         for wreck in [b for b in state['banks'] if isinstance(b, GiantWreck)]:
             if wreck not in seen['tracked']:
                 seen['tracked'].add(wreck)
