@@ -1,13 +1,17 @@
-; Inno Setup Script for Lazer Shark Kill! Kill!
-; Professional Windows Installer
+; Inno Setup script for Lazer Shark Kill! Kill!
+; build_windows_installer.py compiles this after PyInstaller has filled dist\LazerSharkKillKill,
+; passing the version with /DMyAppVersion=x.y.z
 
+#ifndef MyAppVersion
+  #define MyAppVersion "3.0.0"
+#endif
 #define MyAppName "Lazer Shark Kill! Kill!"
-#define MyAppVersion "2.0.0"
-#define MyAppPublisher "Your Name"
-#define MyAppURL "https://github.com/yourusername/lazer-shark-arcade"
+#define MyAppPublisher "wheidal"
+#define MyAppURL "https://github.com/wheidal/LazerShark"
 #define MyAppExeName "LazerSharkKillKill.exe"
 
 [Setup]
+; Keep this AppId: Windows uses it to recognise an upgrade of an earlier install
 AppId={{A8B3C4D5-E6F7-4A5B-9C3D-2E1F0A9B8C7D}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
@@ -18,15 +22,18 @@ AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\LazerSharkKillKill
 DefaultGroupName={#MyAppName}
-AllowNoIcons=yes
+DisableProgramGroupPage=yes
 OutputDir=dist\installer
-OutputBaseFilename=LazerSharkKillKill_Setup_v2.0.0
-SetupIconFile=assets\hai_0.png
+OutputBaseFilename=LazerSharkKillKill_Setup_v{#MyAppVersion}
+SetupIconFile=assets\shark_icon.ico
+UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
-UninstallDisplayIcon={app}\{#MyAppExeName}
-PrivilegesRequired=admin
+; Settings and high scores live in %APPDATA%, so no admin rights are needed.
+; The player can still choose an install for everyone.
+PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 
@@ -35,32 +42,15 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
-Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked; OnlyBelowVersion: 6.1; Check: not IsAdminInstallMode
 
 [Files]
-Source: "dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "dist\LazerSharkKillKill_v2.0.0_Portable\README.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "dist\LazerSharkKillKill\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{group}\Readme"; Filename: "{app}\README.txt"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
-Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: quicklaunchicon
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
-
-[Code]
-function InitializeSetup(): Boolean;
-begin
-  Result := True;
-end;
-
-procedure CurStepChanged(CurStep: TSetupStep);
-begin
-  if CurStep = ssPostInstall then
-  begin
-    // Any post-installation tasks
-  end;
-end;
