@@ -128,6 +128,7 @@ def test_beating_rask_plays_the_ending_and_lets_you_hunt_again(play, monkeypatch
         if frame == 1:
             state['next_boss'] = len(BOSS_ROSTER) - 1
             state['score'] = BOSS_ROSTER[-1][1]
+            state['practice_run'] = True  # No initials to type, so a key hunts again
         if not seen.get('won'):
             state['energy'] = 100
         fight = state['boss']

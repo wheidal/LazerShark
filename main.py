@@ -32,6 +32,7 @@ from music import AREA_TRACKS, MusicDirector
 from story import AREA_TAUNTS, BEATEN_TAUNTS, BOSS_TAUNTS, Radio
 from shark_look import SharkLook
 from attract import AttractMode, Briefing
+from highscores import HighScores, InitialsEntry, draw_table
 from boss import CONTACT_INVULN_MS, DEFAULT_DIFFICULTY, DIFFICULTIES, LASER_RECHARGE, VICTORY_SCORE
 from bosses import BOSS_ROSTER
 from enemies import COAST_INSET, ENEMY_LIMIT, Enemy, choose_enemy, enemy_spawn_ms, toughen
@@ -150,6 +151,7 @@ def main():
     # --- Settings Menu ---
     # Load settings from file
     settings_manager = SettingsManager()
+    high_scores = HighScores()
     
     # Load saved settings
     keymap = {}
@@ -323,7 +325,7 @@ def main():
         dt = clock.tick(60)
         music.update(dt)
         attract.update(dt)
-        attract.draw_title(pygame.time.get_ticks())
+        attract.draw_title(pygame.time.get_ticks(), high_scores)
         pygame.display.flip()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -435,6 +437,11 @@ def main():
     score = 0
     restart_lock = 0
     step_backlog = 0
+    # High scores: jumping to a boss or easy mode is practice, which isn't recorded
+    practice_run = start_boss is not None
+    score_checked = False  # Whether this game over has been checked for a high score yet
+    entry = None  # Initials being typed for a new high score
+    score_place = None  # Where this run landed in the table
 
     # Shield powerup state - Enhanced system
     shield_active = False
@@ -463,6 +470,11 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            # Typing initials takes every key but Esc and F11, once mashing fire can't type them
+            if (entry and restart_lock <= 0 and event.type != pygame.QUIT
+                    and not (event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_F11))):
+                entry.handle(event)
+                continue
             if event.type == pygame.KEYDOWN:
                 # Esc always exits, so a bad remap can't trap the player
                 if event.key == pygame.K_F11:
@@ -484,7 +496,15 @@ def main():
 
         if game_over:
             restart_lock -= frame_ms
-            if restart_requested and restart_lock <= 0:
+            if not score_checked:
+                score_checked = True
+                if not practice_run and not easy_mode and high_scores.qualifies(score):
+                    entry = InitialsEntry(keymap)
+            if entry and entry.done:
+                score_place = high_scores.add(entry.name, score, difficulty)
+                entry = None
+                restart_lock = RESTART_LOCK_MS  # The last letter's press shouldn't also restart
+            if restart_requested and restart_lock <= 0 and entry is None:
                 try:
                     shark = SharkWithSprites(400, 580)
                 except Exception:
@@ -532,26 +552,39 @@ def main():
                 obstacles_destroyed = 0
                 destroyed_counts = {}
                 score = 0
+                score_checked = False
+                score_place = None
+                practice_run = False  # Starting again begins at the start, so it counts
                 step_backlog = 0
                 game_over = False
         if game_over:
             screen.fill((0, 0, 64))
-            if controller_enabled and controller:
-                # Show controller-specific instructions
-                game_over_text = font.render("Game Over! Press any button to play again", True, (255, 0, 0))
-                screen.blit(game_over_text, (120, 260))
-                controller_text = font.render("(Start button to exit)", True, (255, 255, 255))
-                screen.blit(controller_text, (270, 290))
+
+            def centred(text, color, y, use_font=font):
+                image = use_font.render(text, True, color)
+                screen.blit(image, image.get_rect(midtop=(400, y)))
+
+            if won:
+                centred("REVENGE!", (255, 225, 90), 40, title_font)
             else:
-                # Show keyboard instructions
-                game_over_text = font.render("Game Over! Press any key to play again or ESC to exit.", True, (255, 0, 0))
-                if won:
-                    game_over_text = font.render("REVENGE! Press any key to hunt again or ESC to exit.", True, (255, 225, 90))
-                screen.blit(game_over_text, (80, 280))
-            energy_text = font.render(f"Final Energy: {max(0, int(energy))}", True, (255, 255, 255))
-            screen.blit(energy_text, (300, 320))
-            final_score_text = font.render(f"Final Score: {score}", True, (255, 255, 0))
-            screen.blit(final_score_text, (300, 350))
+                centred("GAME OVER", (255, 0, 0), 40, title_font)
+            centred(f"Final Score: {score}     Final Energy: {max(0, int(energy))}", (255, 255, 0), 105)
+            if entry:
+                centred("NEW HIGH SCORE!", (255, 90, 70), 190, title_font)
+                centred("Enter your initials", (255, 255, 255), 260)
+                entry.draw(screen, title_font, (400, 330), pygame.time.get_ticks())
+                centred("UP/DOWN: change letter    LEFT/RIGHT: move    FIRE or ENTER: next", (225, 235, 240), 400)
+                centred("Or just type them", (225, 235, 240), 430)
+            else:
+                draw_table(screen, font, high_scores, 150, score_place)
+                if practice_run or easy_mode:
+                    centred("Practice run (boss jump or easy mode): not recorded", (180, 190, 200), 470)
+                if controller_enabled and controller:
+                    centred("Press any button to play again    (Start button to exit)", (255, 255, 255), 540)
+                elif won:
+                    centred("Press any key to hunt again or ESC to exit", (255, 255, 255), 540)
+                else:
+                    centred("Press any key to play again or ESC to exit", (255, 255, 255), 540)
             pygame.display.flip()
             continue
 
@@ -1275,6 +1308,8 @@ def main():
         graphics_enhancer.render_effects()
         
         pygame.display.flip()
+    if entry:  # Quit while typing initials: keep the score with what's typed so far
+        high_scores.add(entry.name, score, difficulty)
     pygame.quit()
     sys.exit()
 

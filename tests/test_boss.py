@@ -167,6 +167,7 @@ def test_restart_clears_the_boss(play):
         if state['boss'] and 'died' not in seen:
             seen['died'] = frame
             state['energy'] = -1
+            state['practice_run'] = True  # No initials to type, so a key restarts
         elif 'died' not in seen:
             state['energy'] = 100
         elif frame == seen['died'] + 90:
