@@ -1,108 +1,78 @@
 """
-Comprehensive build script for creating Windows installer for Lazer Shark Kill! Kill!
-This script creates both a standalone executable and an Inno Setup installer.
-"""
+Builds Lazer Shark Kill! Kill! for Windows: the game folder, a portable ZIP and an installer.
 
+Run on Windows, from the project folder, with the build requirements installed:
+
+    pip install -r requirements.txt -r requirements_build.txt
+    python build_windows_installer.py [--version 3.0.0]
+
+The installer needs Inno Setup 6 (https://jrsoftware.org/isdl.php). Without it you still
+get the game folder and the portable ZIP. Everything lands in dist/. The script exits with
+an error code if any step fails, so a CI run fails with it.
+"""
+import argparse
 import os
-import sys
+import re
 import shutil
 import subprocess
+import sys
 import zipfile
-from datetime import datetime
 
-# Configuration
 GAME_NAME = "LazerSharkKillKill"
-GAME_VERSION = "2.0.0"
-AUTHOR = "Your Name"
-DESCRIPTION = "Underwater arcade shooter with laser-equipped shark"
+PRODUCT_NAME = "Lazer Shark Kill! Kill!"
+VERSION = "3.0.0"
+PUBLISHER = "wheidal"
+DESCRIPTION = "Underwater arcade shooter with a laser-equipped shark"
+YEAR = "2026"
+APP_FOLDER = os.path.join('dist', GAME_NAME)
 
-def clean_build_dirs():
-    """Clean previous build directories"""
-    dirs_to_clean = ['build', 'dist', '__pycache__']
-    for dir_name in dirs_to_clean:
-        if os.path.exists(dir_name):
-            print(f"🧹 Cleaning {dir_name}/...")
-            shutil.rmtree(dir_name)
+README = """Lazer Shark Kill! Kill! v{version}
+{dashes}
 
-def create_icon():
-    """Convert PNG to ICO if needed"""
-    icon_path = "assets/shark_icon.ico"
-    if not os.path.exists(icon_path):
-        try:
-            from PIL import Image
-            png_path = "assets/hai_0.png"
-            if os.path.exists(png_path):
-                img = Image.open(png_path)
-                img.save(icon_path, format='ICO', sizes=[(256, 256), (128, 128), (64, 64), (32, 32), (16, 16)])
-                print(f"✅ Created icon: {icon_path}")
-        except ImportError:
-            print("⚠️ Pillow not installed. Using PNG as icon.")
-            icon_path = "assets/hai_0.png"
-    return icon_path
+Run LazerSharkKillKill.exe to play.
 
-def build_executable():
-    """Build the Windows executable using PyInstaller"""
-    print("\n🚀 Building Windows Executable...")
-    
-    icon_path = create_icon()
-    
-    # Create PyInstaller spec file
-    spec_content = f'''# -*- mode: python ; coding: utf-8 -*-
+Controls (remappable in Settings)
+  Arrow keys   Move
+  Space        Fire
+  P            Pause
+  Esc          Quit
+  F11          Full screen
 
-a = Analysis(
-    ['main.py'],
-    pathex=[],
-    binaries=[],
-    datas=[
-        ('assets', 'assets'),
-        ('sounds', 'sounds'),
-        ('sprites', 'sprites'),
-        ('*.py', '.'),
-    ],
-    hiddenimports=['pygame', 'numpy'],
-    hookspath=[],
-    hooksconfig={{}},
-    runtime_hooks=[],
-    excludes=['tkinter', 'matplotlib', 'scipy', 'pandas'],
-    noarchive=False,
-    optimize=2,
-)
+On the title screen, S opens Settings and 1-6 jump straight to a boss.
+A controller works once it's switched on in Settings.
 
-pyz = PYZ(a.pure)
+Settings and high scores are saved in %APPDATA%\\LazerSharkKillKill.
 
-exe = EXE(
-    pyz,
-    a.scripts,
-    a.binaries,
-    a.datas,
-    [],
-    name='{GAME_NAME}',
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
-    console=False,
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
-    icon='{icon_path}',
-    version='version_info.txt'
-)
-'''
-    
-    # Write spec file
-    with open(f'{GAME_NAME}.spec', 'w', encoding='utf-8') as f:
-        f.write(spec_content)
-    
-    # Create version info file
-    version_info = f'''VSVersionInfo(
+Windows may warn that this app is from an unknown publisher, because the game
+isn't digitally signed. Click "More info", then "Run anyway".
+
+https://github.com/wheidal/LazerShark
+"""
+
+
+def step(message):
+    print(f"\n== {message}", flush=True)
+
+
+def fail(message):
+    print(f"\nBUILD FAILED: {message}", flush=True)
+    sys.exit(1)
+
+
+def clean():
+    for folder in ('build', 'dist'):
+        if os.path.exists(folder):
+            shutil.rmtree(folder)
+
+
+def write_version_info(version):
+    """The details Windows shows under the exe's Properties."""
+    parts = (version.split('.') + ['0', '0', '0', '0'])[:4]
+    numbers = ', '.join(str(int(part)) for part in parts)
+    text = f"""VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=({GAME_VERSION.replace(".", ", ")}, 0),
-    prodvers=({GAME_VERSION.replace(".", ", ")}, 0),
+    filevers=({numbers}),
+    prodvers=({numbers}),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -115,263 +85,113 @@ exe = EXE(
       [
         StringTable(
           u'040904B0',
-          [StringStruct(u'CompanyName', u'{AUTHOR}'),
+          [StringStruct(u'CompanyName', u'{PUBLISHER}'),
           StringStruct(u'FileDescription', u'{DESCRIPTION}'),
-          StringStruct(u'FileVersion', u'{GAME_VERSION}'),
+          StringStruct(u'FileVersion', u'{version}'),
           StringStruct(u'InternalName', u'{GAME_NAME}'),
-          StringStruct(u'LegalCopyright', u'Copyright (c) 2024 {AUTHOR}'),
+          StringStruct(u'LegalCopyright', u'Copyright (c) {YEAR} {PUBLISHER}'),
           StringStruct(u'OriginalFilename', u'{GAME_NAME}.exe'),
-          StringStruct(u'ProductName', u'Lazer Shark Kill! Kill!'),
-          StringStruct(u'ProductVersion', u'{GAME_VERSION}')])
+          StringStruct(u'ProductName', u'{PRODUCT_NAME}'),
+          StringStruct(u'ProductVersion', u'{version}')])
       ]
     ),
     VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
   ]
-)'''
-    
-    with open('version_info.txt', 'w', encoding='utf-8') as f:
-        f.write(version_info)
-    
-    # Run PyInstaller
-    cmd = [
-        sys.executable, '-m', 'PyInstaller',
-        '--clean',
-        '--noconfirm',
-        f'{GAME_NAME}.spec'
-    ]
-    
-    try:
-        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-        print("✅ Executable built successfully!")
-        print(f"📁 Location: dist/{GAME_NAME}.exe")
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Build failed: {e}")
-        print(f"Error output: {e.stderr}")
-        return False
-
-def create_portable_zip():
-    """Create a portable ZIP distribution"""
-    print("\n📦 Creating Portable ZIP Distribution...")
-    
-    dist_name = f"{GAME_NAME}_v{GAME_VERSION}_Portable"
-    dist_dir = f"dist/{dist_name}"
-    
-    # Create distribution directory
-    os.makedirs(dist_dir, exist_ok=True)
-    
-    # Copy executable
-    exe_path = f"dist/{GAME_NAME}.exe"
-    if os.path.exists(exe_path):
-        shutil.copy(exe_path, dist_dir)
-    
-    # Create README
-    readme_content = f"""
-# Lazer Shark Kill! Kill! - v{GAME_VERSION}
-## Portable Edition
-
-### How to Play
-Simply run {GAME_NAME}.exe to start the game!
-
-### System Requirements
-- Windows 10 or later
-- 256MB RAM
-- 50MB free disk space
-- DirectX 9.0c or later
-
-### Controls
-**Movement:**
-- Arrow Keys or Gamepad Left Stick
-
-**Weapons:**
-- Space / A Button: Fire Laser
-
-**Other:**
-- P / Start: Pause
-- Escape: Quit
-
-### Features
-- Multiple weapon systems
-- Shield powerups
-- Background music with volume control
-- Controller support
-- Customizable controls
-- Easy mode option
-
-### Troubleshooting
-If the game doesn't start:
-1. Make sure Windows Defender isn't blocking it
-2. Try running as Administrator
-3. Install Visual C++ Redistributables if needed:
-   https://aka.ms/vs/17/release/vc_redist.x64.exe
-
-### Support
-For issues or feedback, visit:
-https://github.com/yourusername/lazer-shark-arcade
-
-Enjoy the underwater mayhem! 🦈💥
-
-Version {GAME_VERSION} - Built on {datetime.now().strftime('%Y-%m-%d')}
+)
 """
-    
-    with open(f"{dist_dir}/README.txt", 'w', encoding='utf-8') as f:
-        f.write(readme_content)
-    
-    # Create batch launcher
-    batch_content = f"""@echo off
-title Lazer Shark Kill! Kill! v{GAME_VERSION}
-echo Starting Lazer Shark Kill! Kill!...
-start "" "{GAME_NAME}.exe"
-exit"""
-    
-    with open(f"{dist_dir}/Play Game.bat", 'w', encoding='utf-8') as f:
-        f.write(batch_content)
-    
-    # Create ZIP file
-    zip_name = f"{dist_name}.zip"
-    with zipfile.ZipFile(f"dist/{zip_name}", 'w', zipfile.ZIP_DEFLATED) as zipf:
-        for root, dirs, files in os.walk(dist_dir):
-            for file in files:
-                file_path = os.path.join(root, file)
-                arcname = os.path.relpath(file_path, os.path.dirname(dist_dir))
-                zipf.write(file_path, arcname)
-    
-    print(f"✅ Portable ZIP created: dist/{zip_name}")
-    return True
+    with open('version_info.txt', 'w', encoding='utf-8', newline='\r\n') as f:
+        f.write(text)
 
-def create_installer():
-    """Create Inno Setup installer"""
-    print("\n🔧 Creating Inno Setup Installer...")
-    
-    # Update the existing Inno Setup script
-    iss_content = f'''; Inno Setup Script for Lazer Shark Kill! Kill!
-; Professional Windows Installer
 
-#define MyAppName "Lazer Shark Kill! Kill!"
-#define MyAppVersion "{GAME_VERSION}"
-#define MyAppPublisher "{AUTHOR}"
-#define MyAppURL "https://github.com/yourusername/lazer-shark-arcade"
-#define MyAppExeName "{GAME_NAME}.exe"
+def build_game():
+    result = subprocess.run([sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', f'{GAME_NAME}.spec'])
+    if result.returncode != 0:
+        fail("PyInstaller didn't finish")
+    exe = os.path.join(APP_FOLDER, f'{GAME_NAME}.exe')
+    if not os.path.exists(exe):
+        fail(f"{exe} wasn't made")
+    bundled = os.path.join(APP_FOLDER, '_internal')
+    for needed in (os.path.join('assets', 'hai_0.png'), os.path.join('sounds', 'laser.wav'),
+                   os.path.join('sounds', 'music', 'title.wav')):
+        if not os.path.exists(os.path.join(bundled, needed)):
+            fail(f"{needed} is missing from the build")
 
-[Setup]
-AppId={{{{A8B3C4D5-E6F7-4A5B-9C3D-2E1F0A9B8C7D}}
-AppName={{#MyAppName}}
-AppVersion={{#MyAppVersion}}
-AppVerName={{#MyAppName}} v{{#MyAppVersion}}
-AppPublisher={{#MyAppPublisher}}
-AppPublisherURL={{#MyAppURL}}
-AppSupportURL={{#MyAppURL}}
-AppUpdatesURL={{#MyAppURL}}
-DefaultDirName={{autopf}}\\LazerSharkKillKill
-DefaultGroupName={{#MyAppName}}
-AllowNoIcons=yes
-OutputDir=dist\\installer
-OutputBaseFilename={GAME_NAME}_Setup_v{GAME_VERSION}
-SetupIconFile=assets\\hai_0.png
-Compression=lzma2/max
-SolidCompression=yes
-WizardStyle=modern
-UninstallDisplayIcon={{app}}\\{{#MyAppExeName}}
-PrivilegesRequired=admin
-ArchitecturesAllowed=x64compatible
-ArchitecturesInstallIn64BitMode=x64compatible
 
-[Languages]
-Name: "english"; MessagesFile: "compiler:Default.isl"
+def write_readme(version):
+    title = f"{PRODUCT_NAME} v{version}"
+    with open(os.path.join(APP_FOLDER, 'README.txt'), 'w', encoding='utf-8', newline='\r\n') as f:
+        f.write(README.format(version=version, dashes='=' * len(title)))
 
-[Tasks]
-Name: "desktopicon"; Description: "{{cm:CreateDesktopIcon}}"; GroupDescription: "{{cm:AdditionalIcons}}"
-Name: "quicklaunchicon"; Description: "{{cm:CreateQuickLaunchIcon}}"; GroupDescription: "{{cm:AdditionalIcons}}"; Flags: unchecked; OnlyBelowVersion: 6.1; Check: not IsAdminInstallMode
 
-[Files]
-Source: "dist\\{{#MyAppExeName}}"; DestDir: "{{app}}"; Flags: ignoreversion
-Source: "dist\\{GAME_NAME}_v{GAME_VERSION}_Portable\\README.txt"; DestDir: "{{app}}"; Flags: ignoreversion
+def make_zip(version):
+    path = os.path.join('dist', f'{GAME_NAME}_v{version}_Portable.zip')
+    with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as archive:
+        for root, _, files in os.walk(APP_FOLDER):
+            for name in files:
+                full = os.path.join(root, name)
+                archive.write(full, os.path.join(GAME_NAME, os.path.relpath(full, APP_FOLDER)))
+    return path
 
-[Icons]
-Name: "{{group}}\\{{#MyAppName}}"; Filename: "{{app}}\\{{#MyAppExeName}}"
-Name: "{{group}}\\Readme"; Filename: "{{app}}\\README.txt"
-Name: "{{group}}\\{{cm:UninstallProgram,{{#MyAppName}}}}"; Filename: "{{uninstallexe}}"
-Name: "{{autodesktop}}\\{{#MyAppName}}"; Filename: "{{app}}\\{{#MyAppExeName}}"; Tasks: desktopicon
-Name: "{{userappdata}}\\Microsoft\\Internet Explorer\\Quick Launch\\{{#MyAppName}}"; Filename: "{{app}}\\{{#MyAppExeName}}"; Tasks: quicklaunchicon
 
-[Run]
-Filename: "{{app}}\\{{#MyAppExeName}}"; Description: "{{cm:LaunchProgram,{{#StringChange(MyAppName, '&', '&&')}}}}"; Flags: nowait postinstall skipifsilent
+def find_iscc():
+    found = shutil.which('iscc')
+    if found:
+        return found
+    for root in (os.environ.get('ProgramFiles(x86)'), os.environ.get('ProgramFiles'),
+                 os.environ.get('LOCALAPPDATA') and os.path.join(os.environ['LOCALAPPDATA'], 'Programs')):
+        if root:
+            candidate = os.path.join(root, 'Inno Setup 6', 'ISCC.exe')
+            if os.path.exists(candidate):
+                return candidate
+    return None
 
-[Code]
-function InitializeSetup(): Boolean;
-begin
-  Result := True;
-end;
 
-procedure CurStepChanged(CurStep: TSetupStep);
-begin
-  if CurStep = ssPostInstall then
-  begin
-    // Any post-installation tasks
-  end;
-end;
-'''
-    
-    # Write updated Inno Setup script
-    with open('installer_setup.iss', 'w', encoding='utf-8') as f:
-        f.write(iss_content)
-    
-    print("✅ Inno Setup script created: installer_setup.iss")
-    print("\n📌 Next steps to create installer:")
-    print("1. Download Inno Setup from: https://jrsoftware.org/isdl.php")
-    print("2. Install Inno Setup")
-    print("3. Open installer_setup.iss in Inno Setup Compiler")
-    print("4. Click 'Compile' to create the installer")
-    print("   OR run: iscc installer_setup.iss")
-    
-    # Try to compile if Inno Setup is installed
-    try:
-        result = subprocess.run(['iscc', 'installer_setup.iss'], capture_output=True, text=True)
-        if result.returncode == 0:
-            print("\n✅ Installer created successfully!")
-            print(f"📁 Location: dist/installer/{GAME_NAME}_Setup_v{GAME_VERSION}.exe")
-        else:
-            print("\n⚠️ Inno Setup not found. Please install it and compile manually.")
-    except FileNotFoundError:
-        print("\n⚠️ Inno Setup compiler (iscc) not found in PATH.")
-    
-    return True
+def make_installer(version, required):
+    iscc = find_iscc()
+    if not iscc:
+        message = "Inno Setup 6 isn't installed, so there's no installer. Get it from https://jrsoftware.org/isdl.php"
+        if required:
+            fail(message)
+        print(message)
+        return None
+    result = subprocess.run([iscc, f'/DMyAppVersion={version}', 'installer_setup.iss'])
+    if result.returncode != 0:
+        fail("Inno Setup didn't finish")
+    path = os.path.join('dist', 'installer', f'{GAME_NAME}_Setup_v{version}.exe')
+    if not os.path.exists(path):
+        fail(f"{path} wasn't made")
+    return path
+
 
 def main():
-    """Main build process"""
-    print(f"""
-╔══════════════════════════════════════════════════════╗
-║     Lazer Shark Kill! Kill! - Windows Build Tool     ║
-║                    Version {GAME_VERSION}                     ║
-╚══════════════════════════════════════════════════════╝
-    """)
-    
-    # Step 1: Clean
-    clean_build_dirs()
-    
-    # Step 2: Build executable
-    if not build_executable():
-        print("\n❌ Build failed. Please check the errors above.")
-        return 1
-    
-    # Step 3: Create portable distribution
-    create_portable_zip()
-    
-    # Step 4: Create installer
-    create_installer()
-    
-    print(f"""
-╔══════════════════════════════════════════════════════╗
-║                  BUILD COMPLETE! 🎉                   ║
-╠══════════════════════════════════════════════════════╣
-║ Outputs created:                                      ║
-║ 1. Executable: dist/{GAME_NAME}.exe{'':18}║
-║ 2. Portable ZIP: dist/{GAME_NAME}_v{GAME_VERSION}_Portable.zip{'':2}║
-║ 3. Installer script: installer_setup.iss             ║
-╚══════════════════════════════════════════════════════╝
-    """)
-    
-    return 0
+    parser = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
+    parser.add_argument('--version', default=VERSION, help=f"version number, such as {VERSION}")
+    parser.add_argument('--require-installer', action='store_true',
+                        help="fail if Inno Setup isn't installed, instead of skipping the installer")
+    args = parser.parse_args()
+    version = args.version.lstrip('v')
+    if not re.fullmatch(r'\d+(\.\d+){0,3}', version):
+        fail(f"the version must be numbers and dots, such as {VERSION}, not {args.version}")
+    if sys.platform != 'win32':
+        fail("this builds a Windows game, so it has to run on Windows")
 
-if __name__ == "__main__":
-    sys.exit(main())
+    step(f"Building {PRODUCT_NAME} v{version}")
+    clean()
+    write_version_info(version)
+    step("Packing the game with PyInstaller")
+    build_game()
+    write_readme(version)
+    step("Making the portable ZIP")
+    zip_path = make_zip(version)
+    step("Making the installer")
+    installer = make_installer(version, args.require_installer)
+
+    step("Done")
+    print(f"Game folder:  {APP_FOLDER}")
+    print(f"Portable ZIP: {zip_path}")
+    if installer:
+        print(f"Installer:    {installer}")
+
+
+if __name__ == '__main__':
+    main()
