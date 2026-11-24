@@ -24,6 +24,7 @@ OFF_BOTTOM = 620
 STEER_LOOKAHEAD = 80
 STEER_MARGIN = 10
 STEER_SPEED = 5
+COAST_INSET = 4  # How far into the channel a coast dweller sits from the bank's edge
 _art = {}
 
 
@@ -48,6 +49,7 @@ class Enemy(pygame.sprite.Sprite):
     drops_pickup = False
     bursts_on_coast = False
     steers = False
+    hugs_coast = False  # Spawned at the coast's edge instead of out in the channel
 
     def __init__(self, x, y, shark_rect, image):
         super().__init__()
@@ -647,8 +649,210 @@ class Anglerfish(Enemy):
         self.move_to_pos()
 
 
+def _rock_moray_art(direction):
+    art = pygame.Surface((150, 40), pygame.SRCALPHA)
+    for i in range(7):  # Body, back into the rock
+        x = 8 + i * 16
+        pygame.draw.circle(art, (14, 22, 18), (x, 20), 15)
+        pygame.draw.circle(art, (84, 112, 58), (x, 19), 13)
+        pygame.draw.circle(art, (196, 186, 92), (x - 3, 15), 3)
+    pygame.draw.polygon(art, (14, 22, 18), [(112, 4), (150, 14), (150, 26), (112, 36)])
+    pygame.draw.polygon(art, (84, 112, 58), [(114, 7), (147, 16), (147, 24), (114, 33)])
+    for x in (126, 136):
+        pygame.draw.polygon(art, (246, 240, 220), [(x, 15), (x + 4, 15), (x + 2, 21)])
+    pygame.draw.circle(art, (240, 220, 60), (124, 12), 3)
+    pygame.draw.circle(art, (240, 220, 60), (124, 28), 3)
+    return pygame.transform.flip(art, True, False) if direction < 0 else art
+
+
+class RockMoray(Enemy):
+    """Lives in a hole in the coast. As the shark passes level with it, its eyes glow, then it lunges out."""
+    WIDTH, HEIGHT = 40, 40
+    kind = 'rock_moray'
+    name = "Moray in the Rock"
+    hugs_coast = True
+    toughness = 4
+    damage = 20
+    reward = 4
+    counts_for_rewards = True
+    debris_color = (120, 150, 80)
+    WAKE_DISTANCE = 70  # How close, up and down the screen, the shark has to come
+    WARN_STEPS = 26
+    REACH = 115
+    LUNGE_SPEED = 13
+    RETRACT_SPEED = 4
+    HOLD_STEPS = 20
+
+    def __init__(self, x, y, shark_rect, side=-1):
+        self.side = side  # The coast it lives in: -1 left, 1 right
+        image = _cached(('rock_moray', -side), lambda: _rock_moray_art(-side))
+        super().__init__(x, y, shark_rect, image)
+        self.hole_x = x
+        self.out = 0
+        self.state = 'waiting'
+        self.timer = 0
+        self._place()
+
+    def _place(self):
+        # The head pokes just out of the hole until it lunges. The body stays back in the rock.
+        head = self.hole_x - self.side * (12 + self.out)
+        self.pos.x = head + self.side * (self.image.get_width() // 2 - 18)
+
+    def update(self):
+        self.age += 1
+        self.pos.y += SCROLL_PER_STEP
+        if self.state == 'waiting' and abs(self.shark_rect.centery - self.pos.y) < self.WAKE_DISTANCE:
+            self.state = 'warning'
+            self.timer = self.WARN_STEPS
+        elif self.state == 'warning':
+            self.timer -= 1
+            if self.timer <= 0:
+                self.state = 'lunge'
+        elif self.state == 'lunge':
+            self.out = min(self.REACH, self.out + self.LUNGE_SPEED)
+            if self.out >= self.REACH:
+                self.state = 'hold'
+                self.timer = self.HOLD_STEPS
+        elif self.state == 'hold':
+            self.timer -= 1
+            if self.timer <= 0:
+                self.state = 'retract'
+        elif self.state == 'retract':
+            self.out = max(0, self.out - self.RETRACT_SPEED)
+            if self.out == 0:
+                self.state = 'done'
+        self._place()
+        self.move_to_pos()
+
+    def draw_warning(self, screen):
+        if self.state == 'warning' and self.age // 4 % 2:
+            eye = (self.hole_x - self.side * 18, self.pos.y)
+            pygame.draw.circle(screen, (255, 80, 50), eye, 9, 3)
+
+    @classmethod
+    def create(cls, x, shark_rect, side=-1):
+        return [cls(x, -cls.HEIGHT, shark_rect, side)]
+
+
+class Harpoon(Hazard):
+    """A slow harpoon. It only hurts once."""
+    damage = 12
+
+    def __init__(self, start, target):
+        super().__init__()
+        heading = pygame.math.Vector2(target) - start
+        heading = heading.normalize() if heading.length() else pygame.math.Vector2(1, 0)
+        base = pygame.Surface((34, 6), pygame.SRCALPHA)
+        pygame.draw.line(base, (170, 160, 140), (0, 3), (26, 3), 2)
+        pygame.draw.polygon(base, (220, 220, 230), [(26, 0), (34, 3), (26, 6)])
+        self.image = pygame.transform.rotate(base, heading.angle_to(pygame.math.Vector2(1, 0)))
+        self.mask = pygame.mask.from_surface(self.image)
+        self.rect = self.image.get_rect(center=start)
+        self.pos = pygame.math.Vector2(start)
+        self.velocity = heading * 4.5
+
+    def update(self):
+        self.pos += self.velocity
+        self.rect.center = self.pos
+        if not OFF_SCREEN.colliderect(self.rect):
+            self.kill()
+
+
+def _diver_art(direction):
+    art = pygame.Surface((54, 42), pygame.SRCALPHA)
+    pygame.draw.rect(art, (210, 180, 40), (2, 16, 30, 14), border_radius=6)  # The scooter
+    pygame.draw.circle(art, (60, 64, 70), (4, 23), 5)
+    pygame.draw.rect(art, (30, 36, 48), (22, 10, 22, 20), border_radius=5)  # Wetsuit
+    pygame.draw.circle(art, (232, 196, 164), (46, 20), 7)
+    pygame.draw.circle(art, (120, 200, 230), (48, 18), 4)  # Mask
+    pygame.draw.line(art, (120, 120, 130), (32, 30), (52, 38), 3)  # Harpoon gun
+    return pygame.transform.flip(art, True, False) if direction < 0 else art
+
+
+class HarpoonDiver(Enemy):
+    """A henchman on a scooter by the coast. He fires slow harpoons across the channel."""
+    WIDTH, HEIGHT = 60, 50
+    kind = 'diver'
+    name = "Harpoon Diver"
+    hugs_coast = True
+    min_score = 20
+    toughness = 2
+    damage = 15
+    reward = 3
+    debris_color = (210, 180, 40)
+    FIRE_STEPS = 95
+    WARN_STEPS = 25
+
+    def __init__(self, x, y, shark_rect, side=-1):
+        self.side = side
+        self.frames = [_cached(('diver', -side), lambda: _diver_art(-side))]
+        super().__init__(x - side * 34, y, shark_rect, self.frames[0])
+
+    def update(self):
+        self.age += 1
+        self.pos.y += SCROLL_PER_STEP
+        if self.age % self.FIRE_STEPS == 0 and 0 < self.pos.y < self.shark_rect.top:
+            self.new_shots.append(Harpoon(self.pos, self.shark_rect.center))
+        self.move_to_pos()
+
+    def draw_warning(self, screen):
+        if self.age % self.FIRE_STEPS > self.FIRE_STEPS - self.WARN_STEPS and self.age // 4 % 2:
+            pygame.draw.circle(screen, (255, 230, 120), self.rect.center, 30, 2)
+
+    @classmethod
+    def create(cls, x, shark_rect, side=-1):
+        return [cls(x, -cls.HEIGHT, shark_rect, side)]
+
+
+def _urchin_art():
+    art = pygame.Surface((52, 52), pygame.SRCALPHA)
+    for i in range(16):
+        angle = i * math.tau / 16
+        pygame.draw.line(art, (60, 40, 80), (26, 26), (26 + math.cos(angle) * 25, 26 + math.sin(angle) * 25), 2)
+    pygame.draw.circle(art, (90, 96, 110), (26, 26), 14)
+    pygame.draw.circle(art, (130, 136, 150), (24, 24), 9)
+    pygame.draw.circle(art, (255, 60, 90), (26, 26), 4)
+    return _finish(art)
+
+
+class UrchinDrone(Enemy):
+    """A slow spiked robot. Destroying it sprays needles, so do it from a distance."""
+    WIDTH, HEIGHT = 60, 60
+    kind = 'urchin'
+    name = "Urchin Drone"
+    min_score = 30
+    toughness = 5
+    damage = 20
+    reward = 5
+    counts_for_rewards = True
+    debris_color = (140, 120, 170)
+    SPEED = 1.2
+    NEEDLES = 10
+    NEEDLE_DAMAGE = 10
+
+    def __init__(self, x, y, shark_rect):
+        super().__init__(x, y, shark_rect, _cached('urchin', _urchin_art))
+
+    def update(self):
+        self.age += 1
+        self.pos.y += self.SPEED + 0.6 * math.sin(self.age * 0.05)
+        self.move_to_pos()
+
+    def on_destroyed(self):
+        """The needles it sprays as it breaks up."""
+        needles = []
+        for i in range(self.NEEDLES):
+            angle = i * math.tau / self.NEEDLES
+            needle = Orb(self.rect.center, (self.rect.centerx + math.cos(angle) * 100,
+                                            self.rect.centery + math.sin(angle) * 100), (210, 180, 240), 5, 5)
+            needle.damage = self.NEEDLE_DAMAGE
+            needles.append(needle)
+        return needles
+
+
 ENEMY_TYPES = {cls.kind: cls for cls in (KamikazeTuna, LaserManta, Barracuda, EvilSub, RadioactivePiranha,
-                                         GuardianStatue, Pufferfish, Hammerhead, Anglerfish)}
+                                         GuardianStatue, Pufferfish, Hammerhead, Anglerfish, RockMoray,
+                                         HarpoonDiver, UrchinDrone)}
 # Switched off to see if the game is better without them. Empty this to bring them back.
 DISABLED_ENEMIES = {'tuna'}
 

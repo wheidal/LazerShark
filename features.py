@@ -143,3 +143,52 @@ class LaserGate(Hazard):
             if self.image is not self.on:  # Each burst can hurt once
                 self.active = True
             self.image = self.on
+
+
+CABLE_OFF_STEPS = 80
+CABLE_WARN_STEPS = 30
+CABLE_ON_STEPS = 45
+CABLE_SPAN = 0.6  # Share of the channel a cable reaches across
+CABLE_SPAWN_MS = 8000
+
+
+class ElectricCable(Hazard):
+    """A snapped power cable hanging out from one bank. It sparks, then arcs across part of the channel."""
+    single_use = False
+    damage = 14
+
+    def __init__(self, left, right, y, side):
+        super().__init__()
+        reach = int((right - left) * CABLE_SPAN)
+        start = left if side < 0 else right - reach
+        self.off = pygame.Surface((reach, 30), pygame.SRCALPHA)
+        points = [(x, 15 + (8 if (x // 22) % 2 else -8)) for x in range(0, reach + 1, 22)]
+        pygame.draw.lines(self.off, (70, 74, 84), False, [(x, 15) for x, _ in points], 4)
+        self.warn = self.off.copy()
+        for x, _ in points[1::3]:
+            pygame.draw.circle(self.warn, (255, 240, 120), (x, 15), 4)
+        self.on = pygame.Surface((reach, 30), pygame.SRCALPHA)
+        pygame.draw.lines(self.on, (130, 210, 255), False, points, 7)
+        pygame.draw.lines(self.on, (240, 250, 255), False, points, 3)
+        self.mask = pygame.mask.from_surface(self.on)
+        self.image = self.off
+        self.rect = self.image.get_rect(topleft=(start, y))
+        self.active = False
+        self.step = 0
+
+    def update(self):
+        self.rect.y += 3
+        if self.rect.top > OFF_BOTTOM:
+            self.kill()
+            return
+        self.step = (self.step + 1) % (CABLE_OFF_STEPS + CABLE_WARN_STEPS + CABLE_ON_STEPS)
+        if self.step < CABLE_OFF_STEPS:
+            self.image = self.off
+            self.active = False
+        elif self.step < CABLE_OFF_STEPS + CABLE_WARN_STEPS:
+            self.image = self.warn if self.step // 4 % 2 else self.off
+            self.active = False
+        else:
+            if self.image is not self.on:  # Each arc can hurt once
+                self.active = True
+            self.image = self.on

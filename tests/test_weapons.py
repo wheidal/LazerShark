@@ -8,8 +8,8 @@ from projectile import Laser
 from weapons import BASE, LADDER, OBSTACLES_FOR_UPGRADE, UPGRADE_MS, WEAPONS, Bolt, WeaponPowerup, WeaponState
 
 
-def test_the_ladder_runs_laser_shotgun_rapid_fan():
-    assert LADDER == ['laser', 'shotgun', 'rapid', 'fan']
+def test_the_ladder_runs_laser_shotgun_rapid_fan_homing():
+    assert LADDER == ['laser', 'shotgun', 'rapid', 'fan', 'homing']
     assert set(LADDER) - {BASE} == set(WEAPONS)
 
 
@@ -22,7 +22,7 @@ def test_each_upgrade_is_one_step_up_and_stops_at_the_top():
         seen.append(weapon.kind)
     assert seen == LADDER[1:] and weapon.at_best
     weapon.upgrade()
-    assert weapon.kind == 'fan'
+    assert weapon.kind == 'homing'
 
 
 def test_a_hit_is_one_step_down_and_stops_at_the_laser():
@@ -30,9 +30,8 @@ def test_a_hit_is_one_step_down_and_stops_at_the_laser():
     weapon.kind = 'fan'
     weapon.downgrade()
     assert weapon.kind == 'rapid'
-    weapon.downgrade()
-    weapon.downgrade()
-    weapon.downgrade()
+    for _ in range(4):
+        weapon.downgrade()
     assert weapon.kind == BASE
 
 
@@ -155,8 +154,8 @@ def test_pickup_moves_up_one_weapon_in_the_game(play):
 
 
 def test_pickup_at_the_top_recharges_the_laser_instead(play):
-    seen = pickup_scene(play, 'fan')
-    assert seen['kind'] == 'fan'
+    seen = pickup_scene(play, 'homing')
+    assert seen['kind'] == 'homing'
     assert seen['laser'] > 90 and seen['banner'] == 'LASER RECHARGED!'
 
 

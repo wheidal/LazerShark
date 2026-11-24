@@ -25,7 +25,7 @@ from hazards import (FIELD_SPAWN_MS, FIELD_TYPES, RadiationCloud, SMALL_CLOUD_RA
                      WHIRLPOOL_SPAWN_MS, Whirlpool)
 from areas import area_for
 from giant_wreck import GiantWreck, H as WRECK_H, SPAWN_EVERY_MS as WRECK_EVERY_MS, W as WRECK_W
-from features import GEYSER_HEIGHT, GEYSER_WIDTH, LaserGate, LavaGeyser
+from features import CABLE_SPAWN_MS, GEYSER_HEIGHT, GEYSER_WIDTH, ElectricCable, LaserGate, LavaGeyser
 from cutscenes import play_ending, play_intro
 from hud import Hud
 from music import AREA_TRACKS, MusicDirector
@@ -34,7 +34,7 @@ from shark_look import SharkLook
 from attract import AttractMode, Briefing
 from boss import CONTACT_INVULN_MS, DEFAULT_DIFFICULTY, DIFFICULTIES, LASER_RECHARGE, VICTORY_SCORE
 from bosses import BOSS_ROSTER
-from enemies import ENEMY_LIMIT, Enemy, choose_enemy, enemy_spawn_ms, toughen
+from enemies import COAST_INSET, ENEMY_LIMIT, Enemy, choose_enemy, enemy_spawn_ms, toughen
 from weapons import OBSTACLES_FOR_UPGRADE, UPGRADE_SPAWN_MS, WeaponPowerup, WeaponState
 
 # The simulation always advances in 60 Hz steps, so game speed doesn't depend on frame rate
@@ -400,6 +400,7 @@ def main():
     drains = pygame.sprite.Group()
     field_timer = 0
     slow_timer = 0
+    cable_timer = 0
     wreck_timer = 0
     banner_next = None
     banner_after = None
@@ -498,6 +499,7 @@ def main():
                 drains.empty()
                 field_timer = 0
                 slow_timer = 0
+                cable_timer = 0
                 wreck_timer = 0
                 banner_next = None
                 banner_after = None
@@ -660,7 +662,8 @@ def main():
                 if easy_mode:
                     shark.laser_energy = 100
                 if shark.fire_laser(weapon.cost, weapon.cooldown):
-                    shots = weapon.fire(shark.rect.centerx, shark.rect.top)
+                    shots = weapon.fire(shark.rect.centerx, shark.rect.top,
+                                        lambda: list(obstacles) + (list(boss.parts) if boss else []))
                     projectiles.add(shots)
                     all_sprites.add(shots)
                     if len(shots) > 1:
@@ -766,9 +769,16 @@ def main():
                 on_screen = sum(isinstance(sprite, Enemy) for sprite in obstacles)
                 kind = choose_enemy(channel.enemy_kinds(), score)
                 if kind and on_screen < ENEMY_LIMIT[difficulty]:
-                    spawn_x = channel.spawn_x(kind.WIDTH, blocking=True, height=kind.HEIGHT)
+                    if kind.hugs_coast:
+                        side = random.choice([-1, 1])
+                        spawn_x = channel.coast_x(side) - side * COAST_INSET
+                    else:
+                        spawn_x = channel.spawn_x(kind.WIDTH, blocking=True, height=kind.HEIGHT)
                     if spawn_x is not None:
-                        new_enemies = kind.create(spawn_x, shark.rect)
+                        if kind.hugs_coast:
+                            new_enemies = kind.create(spawn_x, shark.rect, side)
+                        else:
+                            new_enemies = kind.create(spawn_x, shark.rect)
                         toughen(new_enemies, next_boss)
                         obstacles.add(new_enemies)
                         all_sprites.add(new_enemies)
@@ -792,6 +802,15 @@ def main():
                             random.choice([LaserPowerup, ShieldPowerup])(inside, -WRECK_H * 3 // 4)]
                     powerups.add(loot)
                     all_sprites.add(loot)
+
+            # Snapped power cables hang out from the coast where an area has them
+            cable_timer += dt
+            if cable_timer > CABLE_SPAWN_MS and channel.has_cables() and boss_phase not in ('approach', 'fight') \
+                    and channel.zone != 'arena':
+                cable_timer = 0
+                cable = ElectricCable(*channel.gate_span(), GATE_START_Y, random.choice([-1, 1]))
+                enemy_shots.add(cable)
+                all_sprites.add(cable)
 
             # Each later area has a hazard of its own
             feature = channel.area.get('feature')
@@ -1024,7 +1043,7 @@ def main():
             # One the shark touched has already cost it energy, so its blast spares the shark.
             # A mine that sensed the shark and went off by itself earns nothing
             self_detonated = [sprite for sprite in obstacles
-                              if isinstance(sprite, SeaMine) and sprite.fuse_done and sprite not in destroyed]
+                              if getattr(sprite, 'fuse_done', False) and sprite not in destroyed]
             queue = destroyed + blown_up + self_detonated
             while queue:
                 obs = queue.pop(0)
@@ -1057,6 +1076,10 @@ def main():
                     cloud = RadiationCloud(obs.rect.center, SMALL_CLOUD_RADIUS, SMALL_CLOUD_STEPS)
                     drains.add(cloud)
                     all_sprites.add(cloud)
+                if getattr(obs, 'on_destroyed', None):
+                    pieces = obs.on_destroyed()
+                    enemy_shots.add(pieces)
+                    all_sprites.add(pieces)
                 if obs.drops_pickup:
                     px = max(40, min(760, obs.rect.centerx))
                     p = random.choice([LaserPowerup, WeaponPowerup])(px, obs.rect.centery)

@@ -279,5 +279,6 @@ def test_menu_choice_is_saved_and_used_by_the_fight(play, tmp_path):
 
     play(script, menu_keys=keys, max_frames=6000)
     assert seen['difficulty'] == 'hard'
-    assert boss.DIFFICULTIES['hard']['health'][0] <= seen['health'] <= boss.DIFFICULTIES['hard']['health'][1]
+    low, high = boss.DIFFICULTIES['hard']['health']
+    assert int(low * MorayEel.health_bonus) <= seen['health'] <= high * MorayEel.health_bonus
     assert json.loads((tmp_path / 'game_settings.json').read_text())['difficulty'] == 'hard'

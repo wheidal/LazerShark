@@ -27,6 +27,8 @@ TITLE_COLOR = (255, 70, 50)
 TITLE_SHADOW = (30, 6, 10)
 PROMPT_COLOR = (255, 235, 120)
 BRIEFING_MS = 7000  # Per page. Any key moves on sooner
+COMPACT_ROW = 36
+COMPACT_TEXT_X = 318
 
 
 def _outlined(font, text, color, outline=TITLE_SHADOW, width=3):
@@ -177,19 +179,61 @@ def _weapon_rows():
         (weapon_swatch(BASE), "1. Laser", "Your starting weapon: straight and reliable"),
         (weapon_swatch('shotgun'), "2. Shotgun", "Sprays red plasma balls across a huge arc"),
         (weapon_swatch('rapid'), "3. Rapid laser", "Fires much faster, and empties your laser much faster"),
-        (weapon_swatch('fan'), "4. Fan laser", "A wide spread of shots, and the best of the lot"),
+        (weapon_swatch('fan'), "4. Fan laser", "A wide spread of shots"),
+        (weapon_swatch('homing'), "5. Homing laser", "Shots curve towards targets, and the best of the lot"),
     ]
 
 
+def _fit(image, size=32):
+    scale = size / max(image.get_size())
+    if scale >= 1:
+        return image
+    return pygame.transform.smoothscale(image, (int(image.get_width() * scale), int(image.get_height() * scale)))
+
+
+def _ink_icon():
+    image = pygame.Surface((32, 32), pygame.SRCALPHA)
+    pygame.draw.circle(image, (10, 10, 22), (16, 16), 15)
+    pygame.draw.circle(image, (120, 130, 160), (16, 16), 15, 2)
+    for spot in ((11, 12), (20, 18), (14, 21)):
+        pygame.draw.circle(image, (60, 64, 90), spot, 3)
+    return image
+
+
 def _hazard_rows():
-    shark_rect = pygame.Rect(0, 0, 1, 1)
+    from features import ElectricCable
+    from hazards import InkCloud, MagneticField, ToxicSludge
+    from obstacle import DepthCharge
+    cable = ElectricCable(0, 120, 0, -1).on
     return [
-        (SeaMine(0, 0).image, "Sea mine", "Goes off when you get close. Shoot it from far away, or steer clear"),
-        (RadiationBarrel(0, 0).image, "Radiation barrel", "Shoot it before it leaks. Clouds go right through your shield"),
-        (RadioactivePiranha(0, 0, shark_rect).image, "Radioactive piranha", "They chase you, and leave radiation behind when killed"),
-        (ZombieFish(0, 0).image, "Zombie fish", "Grey with red crosses for eyes. Don't eat it: it bites!"),
+        (SeaMine(0, 0).image, "Sea mine", "Goes off when you get close. Shoot from far away"),
+        (DepthCharge(0, 0).frames[1], "Depth charge", "Sinks, then blows on a timer. Keep your distance"),
+        (RadiationBarrel(0, 0).image, "Radiation barrel", "Shoot it before it leaks a draining cloud"),
+        (FishingNet(0, 0).image, "Fishing net", "Doesn't hurt, but tangles you. Shoot it away"),
         (EmpJellyfish(0, 0).image, "EMP jellyfish", "Its sting knocks out your laser for 2 seconds"),
-        (FishingNet(0, 0).image, "Fishing net", "Tangles you for a moment. Shoot it away"),
+        (ZombieFish(0, 0).image, "Zombie fish", "Grey with red X eyes. It bites when eaten"),
+        (_ink_icon(), "Ink cloud", "Harmless, but hides whatever is inside"),
+        (ToxicSludge(0, 0).image, "Toxic sludge", "Drains energy and slows you, even shielded"),
+        (MagneticField(0, 0).image.subsurface((118, 118, 64, 64)).copy(), "Magnetic field", "Tugs you sideways. Swim against it"),
+        (cable, "Electric cable", "Sparks, then arcs. Cross while it's dark"),
+    ]
+
+
+def _enemy_rows():
+    from enemies import (Anglerfish, EvilSub, GuardianStatue, Hammerhead, HarpoonDiver, LaserManta, Pufferfish,
+                         RockMoray, UrchinDrone)
+    shark = pygame.Rect(0, 0, 1, 1)
+    return [
+        (LaserManta(0, 0, shark).image, "Laser manta", "Stops on a red line, then fires straight down"),
+        (RadioactivePiranha(0, 0, shark).image, "Radioactive piranha", "Chases you. Leaves radiation when killed"),
+        (Pufferfish(0, 0, shark).frames[1], "Pufferfish", "Swells up close and bursts into spines"),
+        (Hammerhead(0, 0, shark).image, "Hammerhead", "A red line warns of its charge at your height"),
+        (Anglerfish(0, 0, shark).image, "Anglerfish", "Its lure looks like an upgrade. Look closely"),
+        (RockMoray(0, 0, shark).image, "Moray in the rock", "Eyes glow, then it lunges from the coast"),
+        (HarpoonDiver(0, 0, shark).image, "Harpoon diver", "Fires slow harpoons from beside the coast"),
+        (UrchinDrone(0, 0, shark).image, "Urchin drone", "Sprays needles when destroyed. Kill it far off"),
+        (EvilSub(0, 0, shark).image, "Evil sub", "Fires torpedoes and lays mines. Pays out a pickup"),
+        (GuardianStatue(0, 0, shark).image, "Guardian statue", "Red eyes mean it's about to fire"),
     ]
 
 
@@ -204,9 +248,9 @@ class Briefing:
             (_outlined(title_font, "POWER-UPS", PROMPT_COLOR, (0, 0, 0), 2), _power_up_rows(),
              ["Watch for red warning lines: something is about to fire or charge!"]),
             (_outlined(title_font, "WEAPONS", PROMPT_COLOR, (0, 0, 0), 2), _weapon_rows(),
-             ["Each upgrade lasts 25 seconds. A hit also drops you back one weapon.",
-              "Destroying 10 obstacles earns an upgrade."]),
-            (_outlined(title_font, "HAZARDS", PROMPT_COLOR, (0, 0, 0), 2), _hazard_rows(), []),
+             ["Upgrades last 25 seconds, and a hit drops you back one. 10 kills earn one."]),
+            (_outlined(title_font, "HAZARDS", PROMPT_COLOR, (0, 0, 0), 2), _hazard_rows(), [], True),
+            (_outlined(title_font, "ENEMIES", PROMPT_COLOR, (0, 0, 0), 2), _enemy_rows(), [], True),
         ]
         self.page = 0
         self.elapsed = 0
@@ -228,20 +272,30 @@ class Briefing:
             self.next_page()
         if self.finished:
             return
-        title, rows, notes = self.pages[self.page]
+        title, rows, notes, *compact = self.pages[self.page]
         screen = self.screen
         panel = pygame.Surface((740, 510), pygame.SRCALPHA)
         panel.fill((6, 18, 36, 225))
         screen.blit(panel, (30, 45))
         screen.blit(title, title.get_rect(midtop=(400, 58)))
         y = 118
-        for icon, name, text in rows:
-            screen.blit(icon, icon.get_rect(center=(90, y + 20)))
-            screen.blit(self.name_font.render(name, True, (255, 255, 255)), (135, y))
-            screen.blit(self.text_font.render(text, True, (190, 215, 230)), (135, y + 24))
-            y += 58
+        if compact:  # A long list, one line each
+            for icon, name, text in rows:
+                icon = _fit(icon)
+                screen.blit(icon, icon.get_rect(center=(80, y + 10)))
+                screen.blit(self.name_font.render(name, True, (255, 255, 255)), (110, y))
+                screen.blit(self.text_font.render(text, True, (190, 215, 230)), (COMPACT_TEXT_X, y + 3))
+                y += COMPACT_ROW
+            notes = []
+        else:
+            for icon, name, text in rows:
+                screen.blit(icon, icon.get_rect(center=(90, y + 20)))
+                screen.blit(self.name_font.render(name, True, (255, 255, 255)), (135, y))
+                screen.blit(self.text_font.render(text, True, (190, 215, 230)), (135, y + 24))
+                y += 58
         controls = f"{self._key('fire')}: laser     {self._key('pause')}: pause"
-        for line in notes + [controls]:
+        # The controls only go on the first page, where there's room
+        for line in notes + ([controls] if self.page == 0 else []):
             image = self.text_font.render(line, True, PROMPT_COLOR)
             screen.blit(image, image.get_rect(center=(400, y + 10)))
             y += 28
