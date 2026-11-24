@@ -87,6 +87,13 @@ Take control of a powerful shark armed with lasers, missiles, and torpedoes as y
 - Eat small fish to restore energy
 - Running out of energy means game over!
 
+#### High Scores
+- The best 10 runs are kept, with three-letter initials and the difficulty they were played on
+- Make the table and you enter your initials on the Game Over screen: arrows or a D-pad to pick letters, or just type them
+- The title screen takes turns with the table
+- Runs started by jumping to a boss, or played in Easy Mode, are practice and aren't recorded
+- Scores are saved in `high_scores.json`, beside `game_settings.json`
+
 #### Obstacles
 - **🪸 Coral Reefs**: Organic obstacles that crack and break
 - **🚢 Shipwrecks**: Metallic obstacles with hollow sounds

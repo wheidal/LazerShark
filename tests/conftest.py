@@ -13,6 +13,7 @@ import pygame
 
 import channel
 import enemies
+import highscores
 import main as game
 import settings_manager
 
@@ -20,6 +21,12 @@ import settings_manager
 # What's switched off in the real game, for the tests that check it. Other tests want everything on.
 SWITCHED_OFF_ENEMIES = set(enemies.DISABLED_ENEMIES)
 WHIRLPOOLS_NORMALLY_ON = channel.WHIRLPOOLS_ON
+
+
+@pytest.fixture(autouse=True)
+def scores_kept_apart(monkeypatch, tmp_path):
+    """No test reads or writes the real high-score table."""
+    monkeypatch.setattr(highscores, 'settings_path', lambda name: str(tmp_path / name))
 
 
 @pytest.fixture(autouse=True)

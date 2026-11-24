@@ -9,6 +9,7 @@ from channel import ChannelDirector, SCROLL_PER_STEP
 from enemies import RadioactivePiranha
 from food import SmallFish, ZombieFish
 from graphics_enhancements import ParticleEffects
+from highscores import draw_table_over
 from obstacle import EmpJellyfish, OBSTACLE_TYPES, FishingNet, RadiationBarrel, SeaMine
 from player import Shark
 from player_enhanced import SharkWithSprites
@@ -23,6 +24,8 @@ SIGHT = 380  # How far ahead the demo shark looks for something to shoot
 FIRE_STEPS = 7
 BANK_CLEARANCE = 60  # The demo shark's centre stays this far from the coast
 BLINK_MS = 500
+TITLE_SHOWN_MS = 8000  # The title screen takes turns with the high scores
+SCORES_SHOWN_MS = 5000
 TITLE_COLOR = (255, 70, 50)
 TITLE_SHADOW = (30, 6, 10)
 PROMPT_COLOR = (255, 235, 120)
@@ -150,13 +153,19 @@ class AttractMode:
         self.particles.draw(self.screen)
         self.enhancer.render_effects()
 
-    def draw_title(self, now):
+    def draw_title(self, now, scores=None):
         self.draw_world()
         screen = self.screen
-        y = 95
-        for line in self.title_lines:
-            screen.blit(line, line.get_rect(midtop=(400, y)))
-            y += line.get_height() - 6
+        if scores and scores.entries and now % (TITLE_SHOWN_MS + SCORES_SHOWN_MS) >= TITLE_SHOWN_MS:
+            draw_table_over(screen, self.font, scores, 46)
+        else:
+            y = 95
+            for line in self.title_lines:
+                screen.blit(line, line.get_rect(midtop=(400, y)))
+                y += line.get_height() - 6
+            if scores and scores.best:
+                best = _outlined(self.small, f"HIGH SCORE  {scores.best}", PROMPT_COLOR, (0, 0, 0), 2)
+                screen.blit(best, best.get_rect(midtop=(400, 30)))
         if now // BLINK_MS % 2 == 0:
             prompt = _outlined(self.font, "PRESS ANY KEY TO START", PROMPT_COLOR, (0, 0, 0), 2)
             screen.blit(prompt, prompt.get_rect(center=(400, 400)))
