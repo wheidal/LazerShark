@@ -524,8 +524,57 @@ class FishingNet(_SolidObstacle):
 	_art = staticmethod(_net)
 
 
+def _depth_charge(lit):
+	art = pygame.Surface((30, 40), pygame.SRCALPHA)
+	pygame.draw.rect(art, (60, 64, 70), (3, 4, 24, 32), border_radius=5)
+	pygame.draw.rect(art, (96, 100, 108), (6, 6, 18, 28), border_radius=4)
+	for y in (12, 26):
+		pygame.draw.line(art, (40, 42, 48), (4, y), (26, y), 2)
+	pygame.draw.circle(art, (255, 70, 50) if lit else (110, 30, 30), (15, 19), 4)
+	return _finish(art)
+
+
+class DepthCharge(SeaMine):
+	"""Dropped from a ship far above. It sinks faster than the coast scrolls and goes off on a timer."""
+	WIDTH, HEIGHT = 40, 46
+	kind = 'depth_charge'
+	name = "Depth Charge"
+	damage = 30
+	reward = 2
+	counts_for_rewards = False
+	blast_radius = 110
+	blast_damage = 25
+	debris_color = (200, 140, 80)
+	SINK = 1.5  # Extra px a step on top of the scrolling
+	FUSE_RANGE = (110, 170)
+	SHOW_RANGE_FROM = 45  # Steps left when its blast circle appears
+
+	def __init__(self, x, y):
+		super().__init__(x, y)
+		self.frames = [_cached(('depth_charge', lit), lambda: _depth_charge(lit)) for lit in (False, True)]
+		self.image = self.frames[0]
+		self.mask = pygame.mask.from_surface(self.image, 127)
+		self.rect = self.image.get_rect(midtop=(x, y))
+		self.fuse = random.randint(*self.FUSE_RANGE)
+		self.sink = 0.0
+
+	def sense(self, shark_rect):
+		pass  # A timer, not a sensor
+
+	def update(self):
+		self.sink += self.SINK
+		self.rect.y += int(self.sink)
+		self.sink -= int(self.sink)
+		super().update()
+
+	def draw_warning(self, screen):
+		if self.fuse <= self.SHOW_RANGE_FROM:
+			super().draw_warning(screen)
+
+
 OBSTACLE_TYPES = {cls.kind: cls for cls in (CoralReef, Shipwreck, SeaMine, Jellyfish, EmpJellyfish, RadiationBarrel,
-											Boulder, TumblingRock, Satellite, RocketHulk, CollapsedTower, FishingNet)}
+											Boulder, TumblingRock, Satellite, RocketHulk, CollapsedTower, FishingNet,
+											DepthCharge)}
 
 
 class ReefSegment(pygame.sprite.Sprite):

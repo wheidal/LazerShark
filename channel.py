@@ -14,18 +14,19 @@ ZONES = {
     'lagoon': {'width': (500, 600), 'length': (1500, 2500), 'bend': (400, 800),
                'next': ['pass'], 'decor': ['brain', 'staghorn', 'anemone'],
                'obstacles': ['coral', 'coral', 'coral', 'wreck', 'jellyfish', 'barrel', 'net'], 'whirlpools': True,
-               'enemies': ['tuna', 'tuna', 'manta', 'barracuda', 'piranha', 'puffer'],
+               'enemies': ['tuna', 'tuna', 'manta', 'barracuda', 'piranha', 'puffer', 'rock_moray'],
                'fields': ['ink'],
                # Reef colours, from the water's edge out to the deepest, furthest part
                'reef': [(216, 196, 148), (178, 132, 106), (126, 104, 108), (72, 90, 114), (42, 68, 102)]},
     'pass': {'width': (380, 460), 'length': (900, 1600), 'bend': (240, 520),
              'next': ['lagoon', 'dropoff'], 'decor': ['table', 'fan', 'brain', 'staghorn'],
              'obstacles': ['coral', 'coral', 'mine', 'mine', 'jellyfish', 'emp_jelly', 'barrel', 'boulder'],
-             'enemies': ['tuna', 'tuna', 'barracuda', 'piranha', 'puffer'],
+             'enemies': ['tuna', 'tuna', 'barracuda', 'piranha', 'puffer', 'rock_moray'],
              'reef': [(150, 158, 150), (120, 84, 112), (86, 74, 106), (54, 66, 98), (34, 50, 84)]},
     'dropoff': {'width': (560, 620), 'length': (1000, 1800), 'bend': (400, 800),
                 'next': ['pass'], 'decor': ['fan', 'table'], 'open_side': True,
-                'obstacles': ['wreck', 'wreck', 'mine', 'jellyfish', 'emp_jelly', 'emp_jelly', 'barrel', 'tumbling_rock'],
+                'obstacles': ['wreck', 'wreck', 'mine', 'jellyfish', 'emp_jelly', 'emp_jelly', 'barrel', 'tumbling_rock',
+                              'depth_charge'],
                 'whirlpools': True, 'fields': ['ink', 'sludge'],
                 'enemies': ['tuna', 'manta', 'manta', 'evil_sub', 'piranha', 'angler', 'hammerhead'],
                 'reef': [(92, 120, 138), (58, 76, 106), (40, 54, 88), (28, 40, 72), (18, 28, 56)]},
@@ -319,6 +320,13 @@ class ChannelDirector:
             return None
         return (left + right) // 2
 
+    def coast_x(self, side):
+        """Where the coast meets the water at the top of the screen, on one side."""
+        window = self.recent[-3:] + self.generator.peek(3, self.score)
+        if side < 0:
+            return max(0, max(sample[0] for sample in window))
+        return min(SCREEN_W, min(sample[1] for sample in window))
+
     def gate_span(self):
         """The channel's edges where a gate would start, reaching just under the coast on each side."""
         window = self.recent[-2:] + self.generator.peek(2, self.score)
@@ -352,6 +360,9 @@ class ChannelDirector:
 
     def has_whirlpools(self):
         return WHIRLPOOLS_ON and self._area_value('whirlpools', False)
+
+    def has_cables(self):
+        return self._area_value('cables', False)
 
     def field_kinds(self):
         return self._area_value('fields', [])

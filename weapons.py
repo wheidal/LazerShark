@@ -9,7 +9,7 @@ import pygame
 from projectile import Laser
 
 BASE = 'laser'
-LADDER = [BASE, 'shotgun', 'rapid', 'fan']
+LADDER = [BASE, 'shotgun', 'rapid', 'fan', 'homing']
 
 # cost: laser power per shot. cooldown: seconds between shots. power: damage per bolt.
 # shots and spread (degrees either side of straight up).
@@ -20,7 +20,11 @@ WEAPONS = {
               'cost': 2, 'cooldown': 0.05, 'power': 0.9, 'shots': 1, 'spread': 0},
     'fan': {'name': 'FAN', 'color': (110, 240, 130), 'size': (6, 16), 'speed': 11,
             'cost': 6, 'cooldown': 0.16, 'power': 0.7, 'shots': 7, 'spread': 30},
+    'homing': {'name': 'HOMING', 'color': (210, 120, 255), 'size': (7, 16), 'speed': 10, 'homing': True,
+               'cost': 5, 'cooldown': 0.12, 'power': 0.9, 'shots': 3, 'spread': 18},
 }
+HOMING_RANGE = 320
+HOMING_TURN = 0.6  # px a step of sideways steering
 BASE_COST = 3
 BASE_COOLDOWN = 0.1
 UPGRADE_MS = 25000  # How long a step up the ladder lasts before it drops back one
@@ -52,8 +56,9 @@ def _bolt_image(kind, angle):
 class Bolt(Laser):
     """A laser shot that can fly at an angle."""
 
-    def __init__(self, x, y, kind, angle=0):
+    def __init__(self, x, y, kind, angle=0, targets=None):
         super().__init__(x, y)
+        self.targets = targets if WEAPONS[kind].get('homing') else None
         spec = WEAPONS[kind]
         self.image, self.mask = _bolt_image(kind, round(angle))
         self.rect = self.image.get_rect(midbottom=(x, y))
@@ -62,7 +67,20 @@ class Bolt(Laser):
         self.velocity = pygame.math.Vector2(math.sin(radians), -math.cos(radians)) * spec['speed']
         self.power = spec['power']
 
+    def _steer(self):
+        live = [t for t in self.targets() if t.alive() and t.rect.centery < self.pos.y]
+        if not live:
+            return
+        nearest = min(live, key=lambda t: self.pos.distance_to(t.rect.center))
+        if self.pos.distance_to(nearest.rect.center) < HOMING_RANGE:
+            speed = self.velocity.length()
+            pull = pygame.math.Vector2(nearest.rect.center) - self.pos
+            self.velocity += pull.normalize() * HOMING_TURN
+            self.velocity.scale_to_length(speed)
+
     def update(self, *args, **kwargs):
+        if self.targets:
+            self._steer()
         self.pos += self.velocity
         self.rect.center = self.pos
         if not OFF_SCREEN.colliderect(self.rect):
@@ -116,14 +134,16 @@ class WeaponState:
             if self.time_left <= 0:
                 self.downgrade()
 
-    def fire(self, x, y):
+    def fire(self, x, y, targets=None):
+        """targets, for homing shots, is a function giving what they may chase."""
         spec = self._spec
         if not spec:
             return [Laser(x, y)]
         count = spec['shots']
         if count == 1:
-            return [Bolt(x, y, self.kind)]
-        return [Bolt(x, y, self.kind, -spec['spread'] + i * 2 * spec['spread'] / (count - 1)) for i in range(count)]
+            return [Bolt(x, y, self.kind, 0, targets)]
+        return [Bolt(x, y, self.kind, -spec['spread'] + i * 2 * spec['spread'] / (count - 1), targets)
+                for i in range(count)]
 
 
 def upgrade_icon():
@@ -144,6 +164,9 @@ def weapon_swatch(kind):
     if kind == 'shotgun':
         for x, y in ((6, 20), (11, 11), (17, 7), (23, 11), (28, 20)):
             pygame.draw.circle(image, color, (x, y), 4)
+    elif kind == 'homing':
+        for x, bend in ((6, 6), (17, 0), (28, -6)):
+            pygame.draw.lines(image, color, False, [(x, 32), (x + bend // 2, 18), (17, 4)], 3)
     elif kind == 'fan':
         for end in ((4, 6), (17, 2), (30, 6)):
             pygame.draw.line(image, color, (17, 32), end, 3)

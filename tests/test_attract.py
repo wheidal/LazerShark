@@ -43,3 +43,21 @@ def test_settings_reached_from_title_then_game_starts(play):
 
     assert play(script, menu_keys=keys) == 'stopped'
     assert seen['frame'] == 3
+
+
+def test_every_briefing_line_fits_its_page(display):
+    from attract import COMPACT_ROW, COMPACT_TEXT_X
+    briefing = Briefing(display, {action: pygame.K_a for action in ('fire', 'pause')})
+    for title, rows, notes, *compact in briefing.pages:
+        if compact:
+            assert 118 + len(rows) * COMPACT_ROW <= 500
+            for _, name, text in rows:
+                assert 110 + briefing.name_font.size(name)[0] < COMPACT_TEXT_X - 6, name
+                assert COMPACT_TEXT_X + briefing.text_font.size(text)[0] <= 765, text
+        else:
+            controls = 1 if title is briefing.pages[0][0] else 0
+            assert 118 + len(rows) * 58 + (len(notes) + controls) * 28 <= 500, len(rows)
+            for _, name, text in rows:
+                assert 135 + briefing.text_font.size(text)[0] <= 765, text
+    titles = [page[0] for page in briefing.pages]
+    assert len(titles) == 4

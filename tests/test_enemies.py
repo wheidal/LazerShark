@@ -3,6 +3,7 @@ import random
 import pygame
 import pytest
 
+from areas import AREAS, INTERLUDES
 import channel as ch
 from enemies import (SPAWN_SPEEDUP_PER_AREA, enemy_spawn_ms, toughen, ENEMY_LIMIT, ENEMY_SPAWN_MS, ENEMY_TYPES, Barracuda, Enemy, EnemyTorpedo, EvilSub, KamikazeTuna,
                      LaserManta, MantaBeam, choose_enemy)
@@ -202,18 +203,19 @@ def test_friendly_subs_are_gone():
 def test_session_with_every_enemy_runs_clean(play, monkeypatch):
     for zone in ('lagoon', 'pass', 'dropoff'):
         monkeypatch.setitem(ch.ZONES[zone], 'enemies', list(ENEMY_TYPES))
+    for area in AREAS + list(INTERLUDES.values()):  # An area's own list beats the zone's
+        monkeypatch.setitem(area, 'enemies', list(ENEMY_TYPES))
     seen = {'kinds': set(), 'most': 0}
 
     def script(state, frame):
         state['energy'] = 100
-        if frame == 1:
-            state['score'] = 90
+        state['score'] = 90  # Every kind is allowed, and it stays short of the first boss, which stops spawning
         enemies = [s for s in state['obstacles'] if isinstance(s, Enemy)]
         seen['kinds'].update(s.kind for s in enemies)
         return frame >= 4000 and set(ENEMY_TYPES) <= seen['kinds']  # Which kinds appear is random
 
     assert play(script, quiet=False, max_frames=40000) == 'stopped'
-    assert set(ENEMY_TYPES) <= seen['kinds']
+    assert set(ENEMY_TYPES) <= seen['kinds'], set(ENEMY_TYPES) - seen['kinds']
 
 
 def test_slow_enemies_steer_back_into_open_water(display):
