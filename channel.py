@@ -56,6 +56,7 @@ SPAWN_PADDING = 16
 GATE_OVERLAP = 14
 SPAWN_SAMPLES_BELOW = 8  # Coast samples a spawned sprite can overlap: tall obstacles reach below the top
 SPAWN_SAMPLES_ABOVE = 3  # Sprites start slightly above the top of the screen
+SAMPLES_ON_SCREEN = 76  # Enough coast to cover the screen, for sprites that slide down past it
 SCROLL_PER_STEP = 3
 SHARK_SPEED = 5
 SHARK_BODY_W = 45
@@ -242,6 +243,7 @@ class ChannelDirector:
         self.distance = 0
         self.last_sample = None
         self.recent = []
+        self.history = []  # Like recent, but down to the bottom of the screen
         self.score = 0
         self.world_y = 0
         self.reef_colors = ZONES['lagoon']['reef']
@@ -269,7 +271,8 @@ class ChannelDirector:
         self.last_sample = samples[-1]
         self.arena_chunks = self.arena_chunks + 1 if all(self._in_settled_arena(s) for s in samples) else 0
         self.score = score
-        self.recent = (self.recent + samples[1:])[-SPAWN_SAMPLES_BELOW:]
+        self.history = (self.history + samples[1:])[-SAMPLES_ON_SCREEN:]
+        self.recent = self.history[-SPAWN_SAMPLES_BELOW:]
         previous = self.reef_colors
         target = (self.zone == 'arena' and self.arena_reef) or self._area_value('reef')
         self.reef_colors = [lerp_color(now, goal, REEF_COLOR_BLEND) for now, goal in zip(previous, target)]
@@ -370,15 +373,17 @@ class ChannelDirector:
     def enemy_kinds(self):
         return self._area_value('enemies')
 
-    def spawn_x(self, width, blocking=False, height=0):
+    def spawn_x(self, width, blocking=False, height=0, drift=0):
         """Pick an x inside the channel at the top of the screen.
 
         A blocking sprite always leaves one side wide enough to swim past, or returns None
         if it can't. Anything else always gets a position, however sharp the bend.
-        height is how far above the top of the screen the sprite starts.
+        height is how far above the top of the screen the sprite starts. drift is how far
+        down the coast it slides, for a sprite that moves faster than the coast scrolls.
         """
         ahead = SPAWN_SAMPLES_ABOVE + height // SAMPLE_SPACING + 1
-        window = self.recent + self.generator.peek(ahead, self.score)
+        below = SPAWN_SAMPLES_BELOW + -(-drift // SAMPLE_SPACING)
+        window = self.history[-below:] + self.generator.peek(ahead, self.score)
         left = max(0, max(sample[0] for sample in window))
         right = min(SCREEN_W, min(sample[1] for sample in window))
         if self.island:  # Only the water beside the wreck is free
