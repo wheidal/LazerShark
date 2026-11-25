@@ -85,6 +85,18 @@ def test_bank_collision_shape_matches_the_coastline(display):
     assert left.mask.get_at((190, 24)) and right.mask.get_at((10, 24))
 
 
+def test_a_sinking_sprite_keeps_clear_of_the_coast_it_will_pass():
+    director = ch.ChannelDirector(random.Random(1))
+    director.prefill()
+    # The right bank juts out lower down the screen, below what a plain spawn looks at
+    left, _, zone = director.history[0]
+    director.history[0] = (left, 400, zone)
+    for _ in range(200):
+        x = director.spawn_x(40, blocking=True, drift=ch.SAMPLES_ON_SCREEN * ch.SAMPLE_SPACING)
+        assert x is None or x + 20 + ch.SPAWN_PADDING <= 400
+    assert any(director.spawn_x(40, blocking=True) > 400 for _ in range(200))  # Without drift it isn't seen
+
+
 def test_spawns_stay_in_channel_and_blockers_leave_room():
     director = ch.ChannelDirector(random.Random(1))
     director.prefill()

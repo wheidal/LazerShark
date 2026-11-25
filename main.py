@@ -767,7 +767,8 @@ def main():
                 kinds = channel.obstacle_kinds()  # The arena has none, even while leaving it after a win
                 if kinds and random.random() < 0.5 and boss_phase not in ('approach', 'fight'):  # 50% fish
                     kind = OBSTACLE_TYPES[random.choice(kinds)]
-                    spawn_x = channel.spawn_x(kind.WIDTH, blocking=True, height=kind.HEIGHT)
+                    spawn_x = channel.spawn_x(kind.WIDTH, blocking=True, height=kind.HEIGHT,
+                                              drift=getattr(kind, 'DRIFT', 0))
                     if spawn_x is not None:
                         new_obstacles = kind.create(spawn_x)
                         obstacles.add(new_obstacles)

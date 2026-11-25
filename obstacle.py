@@ -547,6 +547,7 @@ class DepthCharge(SeaMine):
 	debris_color = (200, 140, 80)
 	SINK = 1.5  # Extra px a step on top of the scrolling
 	FUSE_RANGE = (110, 170)
+	DRIFT = int(SINK * FUSE_RANGE[1]) + 1  # How far down the coast it can slide before it goes off
 	SHOW_RANGE_FROM = 45  # Steps left when its blast circle appears
 
 	def __init__(self, x, y):
