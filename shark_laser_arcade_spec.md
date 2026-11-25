@@ -242,14 +242,14 @@ tests/               Headless tests using SDL's dummy drivers
 The simulation steps at a fixed 60 Hz, so game speed doesn't depend on frame rate. It runs at most 5 steps per frame, then slows down instead of skipping ahead.
 
 ### Packaging
-- **Windows:** `build_windows.py` and `build_windows_installer.py`, using PyInstaller and Inno Setup. A packaged build saves settings and high scores per user.
+- **Windows:** `build_windows_installer.py` runs PyInstaller (`LazerSharkKillKill.spec`) and Inno Setup (`installer_setup.iss`), giving an installer and a portable zip. GitHub Actions builds both on every pull request and publishes them as a release when a `v*` tag is pushed. A packaged build saves settings and high scores per user in `%APPDATA%\LazerSharkKillKill`.
 - **Android:** `buildozer.spec` and `android_porting_guide.md`.
 
 ---
 
 ## 📋 Testing
 
-- 347 tests run the real game headlessly through a scripted harness (`tests/conftest.py`), plus unit tests for each part.
+- 348 tests run the real game headlessly through a scripted harness (`tests/conftest.py`), plus unit tests for each part.
 - Run them with `pytest`. The full suite takes about 5-7 minutes.
 - Not yet covered: balance testing by people, real controllers and the Windows build.
 
