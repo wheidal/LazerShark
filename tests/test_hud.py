@@ -1,6 +1,6 @@
 import pygame
 
-from hud import FADED_ALPHA, Hud, MARGIN, STATUS_SIZE
+from hud import FADED_ALPHA, Hud, MARGIN, SCORE_SIZE, STATUS_SIZE
 
 FAR_AWAY = pygame.Rect(400, 500, 45, 104)
 
@@ -38,3 +38,14 @@ def test_panel_fades_when_the_shark_is_beneath_it(display):
     assert hud.status.get_alpha() in (None, 255)
     draw(hud, display, shark=pygame.Rect(MARGIN + STATUS_SIZE[0] - 5, MARGIN, 45, 104))
     assert hud.status.get_alpha() == FADED_ALPHA
+
+
+def test_best_score_sits_under_the_score_only_once_there_is_one(display):
+    hud = Hud()
+    draw(hud, display)
+    assert hud.score_panel.get_height() == SCORE_SIZE[1]
+    hud.draw(display, FAR_AWAY, 100, 0, 100, None, 0, 0, best=987654321987)
+    assert hud.score_panel.get_height() > SCORE_SIZE[1] and hud.shown_best == 'BEST 987654321987'
+    assert display.get_at((400, 300))[:3] == (0, 0, 0)
+    hud.draw(display, FAR_AWAY, 100, 0, 100, None, 10, 0, best=0, new_best=True)
+    assert hud.shown_best == 'NEW BEST!'

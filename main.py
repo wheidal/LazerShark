@@ -1296,9 +1296,11 @@ def main():
             pygame.draw.circle(screen, (255, 255, 255), shark.rect.center, 62, 2)
         if boss:
             boss.draw(screen)
+        best_score = high_scores.best
         hud.draw(screen, shark.rect, energy, shield_strength if shield_active else 0, shark.laser_energy,
                  "EMP!" if laser_jam > 0 else weapon.label, score, pygame.time.get_ticks(),
-                 weapon.time_share)
+                 weapon.time_share, best_score,
+                 not practice_run and not easy_mode and score > best_score)
         if boss:
             hud.draw_boss_bar(screen, boss.name, boss.health / boss.max_health)
         if banner and banner_timer > 0:
