@@ -23,7 +23,10 @@ def settings_path(filename):
     """
     if not FROZEN:
         return resource_path(filename)
-    root = os.environ.get('APPDATA') or os.path.join(os.path.expanduser('~'), '.config')
+    if sys.platform == 'darwin':  # A Mac app bundle is read-only once signed
+        root = os.path.join(os.path.expanduser('~'), 'Library', 'Application Support')
+    else:
+        root = os.environ.get('APPDATA') or os.path.join(os.path.expanduser('~'), '.config')
     folder = os.path.join(root, APP_NAME)
     os.makedirs(folder, exist_ok=True)
     return os.path.join(folder, filename)

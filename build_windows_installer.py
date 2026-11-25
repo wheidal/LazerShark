@@ -26,12 +26,8 @@ DESCRIPTION = "Underwater arcade shooter with a laser-equipped shark"
 YEAR = "2026"
 APP_FOLDER = os.path.join('dist', GAME_NAME)
 
-README = """Lazer Shark Kill! Kill! v{version}
-{dashes}
-
-Run LazerSharkKillKill.exe to play.
-
-Controls (remappable in Settings)
+# Shared with build_mac_app.py
+CONTROLS = """Controls (remappable in Settings)
   Arrow keys   Move
   Space        Fire
   P            Pause
@@ -39,7 +35,14 @@ Controls (remappable in Settings)
   F11          Full screen
 
 On the title screen, S opens Settings and 1-6 jump straight to a boss.
-A controller works once it's switched on in Settings.
+A controller works once it's switched on in Settings."""
+
+README = """Lazer Shark Kill! Kill! v{version}
+{dashes}
+
+Run LazerSharkKillKill.exe to play.
+
+{controls}
 
 Settings and high scores are saved in %APPDATA%\\LazerSharkKillKill.
 
@@ -57,6 +60,13 @@ def step(message):
 def fail(message):
     print(f"\nBUILD FAILED: {message}", flush=True)
     sys.exit(1)
+
+
+def check_version(given):
+    version = given.lstrip('v')
+    if not re.fullmatch(r'\d+(\.\d+){0,3}', version):
+        fail(f"the version must be numbers and dots, such as {VERSION}, not {given}")
+    return version
 
 
 def clean():
@@ -103,10 +113,17 @@ def write_version_info(version):
         f.write(text)
 
 
-def build_game():
-    result = subprocess.run([sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', f'{GAME_NAME}.spec'])
+def run_pyinstaller(version):
+    """Shared with build_mac_app.py. The spec reads the version for the Mac app's details."""
+    env = dict(os.environ, LAZERSHARK_VERSION=version)
+    result = subprocess.run([sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', f'{GAME_NAME}.spec'],
+                            env=env)
     if result.returncode != 0:
         fail("PyInstaller didn't finish")
+
+
+def build_game(version):
+    run_pyinstaller(version)
     exe = os.path.join(APP_FOLDER, f'{GAME_NAME}.exe')
     if not os.path.exists(exe):
         fail(f"{exe} wasn't made")
@@ -120,7 +137,7 @@ def build_game():
 def write_readme(version):
     title = f"{PRODUCT_NAME} v{version}"
     with open(os.path.join(APP_FOLDER, 'README.txt'), 'w', encoding='utf-8', newline='\r\n') as f:
-        f.write(README.format(version=version, dashes='=' * len(title)))
+        f.write(README.format(version=version, dashes='=' * len(title), controls=CONTROLS))
 
 
 def make_zip(version):
@@ -169,9 +186,7 @@ def main():
     parser.add_argument('--require-installer', action='store_true',
                         help="fail if Inno Setup isn't installed, instead of skipping the installer")
     args = parser.parse_args()
-    version = args.version.lstrip('v')
-    if not re.fullmatch(r'\d+(\.\d+){0,3}', version):
-        fail(f"the version must be numbers and dots, such as {VERSION}, not {args.version}")
+    version = check_version(args.version)
     if sys.platform != 'win32':
         fail("this builds a Windows game, so it has to run on Windows")
 
@@ -179,7 +194,7 @@ def main():
     clean()
     write_version_info(version)
     step("Packing the game with PyInstaller")
-    build_game()
+    build_game(version)
     write_readme(version)
     step("Making the portable ZIP")
     zip_path = make_zip(version)

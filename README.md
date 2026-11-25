@@ -179,10 +179,10 @@ The game originally used procedural audio generation with NumPy, but has been op
 - Improved compatibility
 - Easier audio editing and customization
 
-### 📦 Building for Windows
-GitHub builds the Windows installer for you (`.github/workflows/windows-build.yml`):
-- **Every pull request**, or **Actions > Windows build > Run workflow**: runs the tests, then builds the game. The installer and a portable ZIP are under the run's **Artifacts**.
-- **Pushing a version tag** such as `v3.0.0` (`git tag v3.0.0 && git push origin v3.0.0`): the same, then a GitHub release with both files attached.
+### 📦 Building for Windows and Mac
+GitHub builds everything for you (`.github/workflows/build.yml`):
+- **Every pull request**, or **Actions > Build > Run workflow**: runs the tests, then builds the Windows installer, a portable Windows ZIP, and a Mac disk image for Apple Silicon and one for Intel. They're under the run's **Artifacts**.
+- **Pushing a version tag** such as `v3.0.0` (`git tag v3.0.0 && git push origin v3.0.0`): the same, then a GitHub release with every file attached.
 
 To build on a Windows PC instead, install Python 3.13 and [Inno Setup 6](https://jrsoftware.org/isdl.php), then:
 ```bash
@@ -191,7 +191,16 @@ python build_windows_installer.py --version 3.0.0
 ```
 The game folder, the ZIP and the installer land in `dist/`. Only the files the game loads are bundled; see `LazerSharkKillKill.spec`.
 
-The installer isn't digitally signed, so Windows warns that it's from an unknown publisher. Players click **More info**, then **Run anyway**.
+To build on a Mac, install Python 3.13, then:
+```bash
+pip install -r requirements.txt -r requirements_build.txt
+python build_mac_app.py --version 3.0.0 --smoke-test
+```
+This builds for the kind of Mac it runs on, Apple Silicon or Intel. The `.app` and the `.dmg` land in `dist/`.
+
+Neither build is digitally signed:
+- **Windows** warns that the installer is from an unknown publisher. Players click **More info**, then **Run anyway**.
+- **macOS** refuses to open the game the first time. Players click **Done**, then go to **System Settings > Privacy & Security** and click **Open Anyway**. The `README.txt` in the disk image explains this.
 
 ### 🤝 Contributing
 
