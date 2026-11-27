@@ -13,10 +13,14 @@ A top-down, vertically scrolling arcade shooter. You're Subject 13, a shark that
 Get the latest version from the [Releases page](https://github.com/wheidal/LazerShark/releases/latest):
 - **`LazerSharkKillKill_Setup_vX.exe`**: the Windows installer.
 - **`LazerSharkKillKill_vX_Portable.zip`**: Windows, no install needed. Unzip it and run `LazerSharkKillKill.exe`.
+- **`LazerSharkKillKill_vX_Mac_AppleSilicon.dmg`**: Macs with an M1 or later chip.
+- **`LazerSharkKillKill_vX_Mac_Intel.dmg`**: Macs with an Intel chip. Open the disk image and drag the game into Applications.
 
-The game isn't digitally signed, so Windows warns that it's from an unknown publisher. Click **More info**, then **Run anyway**.
+The game isn't digitally signed:
+- **Windows** warns that it's from an unknown publisher. Click **More info**, then **Run anyway**.
+- **macOS** won't open it the first time. Click **Done**, then go to **System Settings > Privacy & Security** and click **Open Anyway**.
 
-On other systems, run it from source (below).
+On Linux, run it from source (below).
 
 ## 🎮 The Game
 
@@ -89,7 +93,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-When run from source, settings and high scores are saved beside the code, in `game_settings.json` and `high_scores.json`. The installed game saves them in `%APPDATA%\LazerSharkKillKill`.
+When run from source, settings and high scores are saved beside the code, in `game_settings.json` and `high_scores.json`. The installed game saves them in `%APPDATA%\LazerSharkKillKill` on Windows and `~/Library/Application Support/LazerSharkKillKill` on a Mac.
 
 ## 🔧 Development
 
@@ -131,10 +135,10 @@ python -m pytest -q
 
 The full run takes about 5-7 minutes.
 
-### 📦 Building for Windows
-GitHub builds the Windows installer for you (`.github/workflows/windows-build.yml`):
-- **Every pull request**, or **Actions > Windows build > Run workflow**: runs the tests, then builds the game. The installer and a portable ZIP are under the run's **Artifacts**.
-- **Pushing a version tag** such as `v3.0.0` (`git tag v3.0.0 && git push origin v3.0.0`): the same, then a GitHub release with both files attached.
+### 📦 Building for Windows and Mac
+GitHub builds everything for you (`.github/workflows/build.yml`):
+- **Every pull request**, or **Actions > Build > Run workflow**: runs the tests, then builds the Windows installer, a portable Windows ZIP, and a Mac disk image for Apple Silicon and one for Intel. They're under the run's **Artifacts**.
+- **Pushing a version tag** such as `v3.0.0` (`git tag v3.0.0 && git push origin v3.0.0`): the same, then a GitHub release with every file attached.
 
 To build on a Windows PC instead, install Python 3.13 and [Inno Setup 6](https://jrsoftware.org/isdl.php), then:
 ```bash
@@ -143,7 +147,16 @@ python build_windows_installer.py --version 3.0.0
 ```
 The game folder, the ZIP and the installer land in `dist/`. Only the files the game loads are bundled; see `LazerSharkKillKill.spec`.
 
-The installer isn't digitally signed, so Windows warns that it's from an unknown publisher. Players click **More info**, then **Run anyway**.
+To build on a Mac, install Python 3.13, then:
+```bash
+pip install -r requirements.txt -r requirements_build.txt
+python build_mac_app.py --version 3.0.0 --smoke-test
+```
+This builds for the kind of Mac it runs on, Apple Silicon or Intel. The `.app` and the `.dmg` land in `dist/`.
+
+Neither build is digitally signed:
+- **Windows** warns that the installer is from an unknown publisher. Players click **More info**, then **Run anyway**.
+- **macOS** refuses to open the game the first time. Players click **Done**, then go to **System Settings > Privacy & Security** and click **Open Anyway**. The `README.txt` in the disk image explains this.
 
 ### 🤝 Contributing
 
