@@ -138,19 +138,19 @@ The full run takes about 5-7 minutes.
 ### 📦 Building for Windows and Mac
 GitHub builds everything for you (`.github/workflows/build.yml`):
 - **Every pull request**, or **Actions > Build > Run workflow**: runs the tests, then builds the Windows installer, a portable Windows ZIP, and a Mac disk image for Apple Silicon and one for Intel. They're under the run's **Artifacts**.
-- **Pushing a version tag** such as `v3.0.0` (`git tag v3.0.0 && git push origin v3.0.0`): the same, then a GitHub release with every file attached.
+- **Pushing a version tag** such as `v3.1.0` (`git tag v3.1.0 && git push origin v3.1.0`): the same, then a GitHub release with every file attached.
 
 To build on a Windows PC instead, install Python 3.13 and [Inno Setup 6](https://jrsoftware.org/isdl.php), then:
 ```bash
 pip install -r requirements.txt -r requirements_build.txt
-python build_windows_installer.py --version 3.0.0
+python build_windows_installer.py --version 3.1.0
 ```
 The game folder, the ZIP and the installer land in `dist/`. Only the files the game loads are bundled; see `LazerSharkKillKill.spec`.
 
 To build on a Mac, install Python 3.13, then:
 ```bash
 pip install -r requirements.txt -r requirements_build.txt
-python build_mac_app.py --version 3.0.0 --smoke-test
+python build_mac_app.py --version 3.1.0 --smoke-test
 ```
 This builds for the kind of Mac it runs on, Apple Silicon or Intel. The `.app` and the `.dmg` land in `dist/`.
 

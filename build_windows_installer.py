@@ -4,7 +4,7 @@ Builds Lazer Shark Kill! Kill! for Windows: the game folder, a portable ZIP and 
 Run on Windows, from the project folder, with the build requirements installed:
 
     pip install -r requirements.txt -r requirements_build.txt
-    python build_windows_installer.py [--version 3.0.0]
+    python build_windows_installer.py [--version 3.1.0]
 
 The installer needs Inno Setup 6 (https://jrsoftware.org/isdl.php). Without it you still
 get the game folder and the portable ZIP. Everything lands in dist/. The script exits with
@@ -20,7 +20,7 @@ import zipfile
 
 GAME_NAME = "LazerSharkKillKill"
 PRODUCT_NAME = "Lazer Shark Kill! Kill!"
-VERSION = "3.0.0"
+VERSION = "3.1.0"
 PUBLISHER = "wheidal"
 DESCRIPTION = "Underwater arcade shooter with a laser-equipped shark"
 YEAR = "2026"
