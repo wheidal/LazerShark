@@ -190,3 +190,25 @@ def test_a_score_that_misses_the_table_just_shows_it(play, tmp_path):
 
     play(script)
     assert not seen['asked'] and seen['place'] is None
+
+
+@needs_live_locals
+@pytest.mark.parametrize('practice', [None, 'practice_run', 'easy_mode'])
+def test_the_best_score_shows_during_play(play, tmp_path, practice):
+    with open(tmp_path / SCORES_FILE, 'w') as f:
+        json.dump([{'name': 'TOP', 'score': 50, 'difficulty': 'normal'}], f)
+    seen = {}
+
+    def script(state, frame):
+        if frame == 1 and practice:
+            state[practice] = True
+        if frame in (1, 3):
+            state['score'] = 30 if frame == 1 else 60
+        if frame in (2, 4):
+            seen[frame] = state['hud'].shown_best
+        return frame == 4
+
+    play(script)
+    assert seen[2] == 'BEST 50'
+    # Only a run that will be saved claims a new best
+    assert seen[4] == ('BEST 50' if practice else 'NEW BEST!')

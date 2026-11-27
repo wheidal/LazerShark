@@ -11,6 +11,7 @@ FADED_ALPHA = 80
 
 STATUS_SIZE = (196, 66)
 SCORE_SIZE = (130, 36)
+BEST_HEIGHT = 52  # The score panel grows to this to fit the best score under the score
 PANEL_COLOR = (8, 24, 44, 170)
 PANEL_EDGE = (120, 170, 200, 120)
 BAR_X = 68
@@ -40,9 +41,13 @@ class Hud:
         self.boss_font = pygame.font.SysFont(None, 26)
         self.banner_font = pygame.font.SysFont(None, 44)
         self.status = pygame.Surface(STATUS_SIZE, pygame.SRCALPHA)
-        self.score_panel = pygame.Surface(SCORE_SIZE, pygame.SRCALPHA)
+        self.plain_panel = pygame.Surface(SCORE_SIZE, pygame.SRCALPHA)
+        self.best_panel = pygame.Surface((SCORE_SIZE[0], BEST_HEIGHT), pygame.SRCALPHA)
+        self.score_panel = self.plain_panel
         self.shown_score = None
         self.score_text = None
+        self.shown_best = None
+        self.best_text = None
 
     def _bar(self, panel, y, value, color):
         filled = int(BAR_W * max(0, min(100, value)) / 100)
@@ -64,8 +69,11 @@ class Hud:
         screen.blit(panel, rect)
 
     def draw(self, screen, shark_rect, energy, shield, laser, weapon_label, score, now,
-             weapon_time=None):
-        """shield is 0 when no shield is up. now is the time in ms, which drives the warning flash."""
+             weapon_time=None, best=0, new_best=False):
+        """shield is 0 when no shield is up. now is the time in ms, which drives the warning flash.
+
+        best is the top saved score, shown under the score when there is one. new_best says
+        this run has passed it and will be saved, which shows NEW BEST! in its place."""
         status = self.status
         self._clear(status)
         low = energy < LOW_ENERGY
@@ -90,15 +98,27 @@ class Hud:
         if score != self.shown_score:
             self.shown_score = score
             self.score_text = self.large.render(str(score), True, SCORE_COLOR)
-        panel = self.score_panel
+        showing_best = best > 0 or new_best
+        panel = self.score_panel = self.best_panel if showing_best else self.plain_panel
         self._clear(panel)
-        # The score shrinks to fit rather than ever spilling out of its panel
-        text = self.score_text
         room = SCORE_SIZE[0] - 16
-        if text.get_width() > room:
-            text = pygame.transform.smoothscale(text, (room, text.get_height() * room // text.get_width()))
+        text = self._fit(self.score_text, room)
         panel.blit(text, (SCORE_SIZE[0] - 8 - text.get_width(), 5))
+        if showing_best:
+            line = 'NEW BEST!' if new_best else f'BEST {best}'
+            if line != self.shown_best:
+                self.shown_best = line
+                self.best_text = self.small.render(line, True, SCORE_COLOR if new_best else DIM_COLOR)
+            text = self._fit(self.best_text, room)
+            panel.blit(text, (SCORE_SIZE[0] - 8 - text.get_width(), 33))
         self._show(screen, panel, (screen.get_width() - SCORE_SIZE[0] - MARGIN, MARGIN), shark_rect)
+
+    @staticmethod
+    def _fit(text, room):
+        """Text shrinks to fit rather than ever spilling out of its panel."""
+        if text.get_width() <= room:
+            return text
+        return pygame.transform.smoothscale(text, (room, text.get_height() * room // text.get_width()))
 
     def draw_boss_bar(self, screen, name, share):
         """A wide bar along the bottom, clear of the corner panels and of the eel's lunges."""
