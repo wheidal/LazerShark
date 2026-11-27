@@ -13,10 +13,14 @@ A top-down, vertically scrolling arcade shooter. You're Subject 13, a shark that
 Get the latest version from the [Releases page](https://github.com/wheidal/LazerShark/releases/latest):
 - **`LazerSharkKillKill_Setup_vX.exe`**: the Windows installer.
 - **`LazerSharkKillKill_vX_Portable.zip`**: Windows, no install needed. Unzip it and run `LazerSharkKillKill.exe`.
+- **`LazerSharkKillKill_vX_Mac_AppleSilicon.dmg`**: Macs with an M1 or later chip.
+- **`LazerSharkKillKill_vX_Mac_Intel.dmg`**: Macs with an Intel chip. Open the disk image and drag the game into Applications.
 
-The game isn't digitally signed, so Windows warns that it's from an unknown publisher. Click **More info**, then **Run anyway**.
+The game isn't digitally signed:
+- **Windows** warns that it's from an unknown publisher. Click **More info**, then **Run anyway**.
+- **macOS** won't open it the first time. Click **Done**, then go to **System Settings > Privacy & Security** and click **Open Anyway**.
 
-On other systems, run it from source (below).
+On Linux, run it from source (below).
 
 ## 🎮 The Game
 
@@ -89,7 +93,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-When run from source, settings and high scores are saved beside the code, in `game_settings.json` and `high_scores.json`. The installed game saves them in `%APPDATA%\LazerSharkKillKill`.
+When run from source, settings and high scores are saved beside the code, in `game_settings.json` and `high_scores.json`. The installed game saves them in `%APPDATA%\LazerSharkKillKill` on Windows and `~/Library/Application Support/LazerSharkKillKill` on a Mac.
 
 ## 🔧 Development
 

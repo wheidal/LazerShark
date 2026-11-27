@@ -6,7 +6,7 @@
 The coast scrolls past on both sides. You eat fish to keep your energy up, shoot or dodge whatever is in the way, and pick up upgrades that make your laser stronger.
 
 ## Current Status
-The whole journey is playable, from the intro to the ending. 352 automated tests drive the real game headlessly.
+The whole journey is playable, from the intro to the ending. 356 automated tests drive the real game headlessly.
 
 ---
 
@@ -251,7 +251,7 @@ The simulation steps at a fixed 60 Hz, so game speed doesn't depend on frame rat
 
 ## 📋 Testing
 
-- 352 tests run the real game headlessly through a scripted harness (`tests/conftest.py`), plus unit tests for each part.
+- 356 tests run the real game headlessly through a scripted harness (`tests/conftest.py`), plus unit tests for each part.
 - Run them with `pytest`. The full suite takes about 5-7 minutes.
 - Not yet covered: balance testing by people, real controllers and the Windows and Mac builds.
 
