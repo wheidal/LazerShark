@@ -6,7 +6,7 @@
 The coast scrolls past on both sides. You eat fish to keep your energy up, shoot or dodge whatever is in the way, and pick up upgrades that make your laser stronger.
 
 ## Current Status
-The whole journey is playable, from the intro to the ending. 347 automated tests drive the real game headlessly.
+The whole journey is playable, from the intro to the ending. 352 automated tests drive the real game headlessly.
 
 ---
 
@@ -156,7 +156,7 @@ Chosen in the settings menu. It affects the whole run.
 - **Score from:** destroying obstacles and enemies (each has its own reward), eating fish (+1), collecting pickups (+2) and beating bosses (+100).
 - **High-score table:** the best 10 runs, with three-letter initials and difficulty, saved in `high_scores.json` beside the settings file.
 - **Entering initials:** a score that makes the table asks for initials on the Game Over screen. Pick letters with the arrows or a D-pad, or just type them.
-- **Where it's shown:** the Game Over screen shows the table with your entry highlighted, and the title screen takes turns with it.
+- **Where it's shown:** the Game Over screen shows the table with your entry highlighted, and the title screen takes turns with it. During play, the best score sits under your score, and turns into NEW BEST! once a recorded run passes it.
 - **Practice runs aren't recorded:** runs started by jumping to a boss, and Easy Mode runs.
 
 ---
@@ -249,7 +249,7 @@ The simulation steps at a fixed 60 Hz, so game speed doesn't depend on frame rat
 
 ## 📋 Testing
 
-- 348 tests run the real game headlessly through a scripted harness (`tests/conftest.py`), plus unit tests for each part.
+- 352 tests run the real game headlessly through a scripted harness (`tests/conftest.py`), plus unit tests for each part.
 - Run them with `pytest`. The full suite takes about 5-7 minutes.
 - Not yet covered: balance testing by people, real controllers and the Windows build.
 
@@ -264,7 +264,6 @@ The simulation steps at a fixed 60 Hz, so game speed doesn't depend on frame rat
 - **Balance testing** by real players.
 - **Performance:** the worst frame in one test run took 25 ms, over the 16.7 ms available, and the cause isn't known.
 - **Real music and sounds** to replace the placeholders.
-- **Best score during play:** possibly show it in the corner of the screen.
 
 ---
 
