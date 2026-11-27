@@ -1,183 +1,135 @@
 # 🦈 Lazer Shark Kill! Kill!
 
-A thrilling underwater arcade shooter where you control a laser-equipped shark navigating through dangerous ocean depths!
+A top-down, vertically scrolling arcade shooter. You're Subject 13, a shark that escaped Dr. Rask's lab with a laser bolted to its head. Swim up a winding channel through six areas, beat a boss at the end of each, and take your revenge on Dr. Rask.
 
-![Python](https://img.shields.io/badge/python-v3.8+-blue.svg)
-![Pygame](https://img.shields.io/badge/pygame-v2.0+-green.svg)
+![Python](https://img.shields.io/badge/python-3.13-blue.svg)
+![Pygame](https://img.shields.io/badge/pygame-2.6-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
-## 🎮 Game Overview
+![The title screen](docs/screenshots/title.png)
 
-Take control of a powerful shark armed with lasers, missiles, and torpedoes as you navigate through treacherous underwater environments. Avoid obstacles, collect food to maintain energy, gather powerups to enhance your weapons, and survive as long as possible in this action-packed arcade experience!
+## 📥 Download
 
-### ✨ Key Features
+Get the latest version from the [Releases page](https://github.com/wheidal/LazerShark/releases/latest):
+- **`LazerSharkKillKill_Setup_vX.exe`**: the Windows installer.
+- **`LazerSharkKillKill_vX_Portable.zip`**: Windows, no install needed. Unzip it and run `LazerSharkKillKill.exe`.
 
-- **🔫 Multiple Weapon Systems**: Lasers, missiles, and homing torpedoes
-- **🛡️ Shield System**: Temporary protection from obstacles
-- **🐟 Energy Management**: Eat fish to maintain energy levels
-- **🎵 Immersive Audio**: 16 custom underwater sound effects
-- **🌊 Beautiful Visuals**: Animated water caustics, floating bubbles, and swaying kelp
-- **🎮 Controller Support**: Full gamepad compatibility
-- **⚙️ Customizable Controls**: Remap keys to your preference
-- **😌 Easy Mode**: For casual players
+The game isn't digitally signed, so Windows warns that it's from an unknown publisher. Click **More info**, then **Run anyway**.
 
-## 🚀 Quick Start
+On other systems, run it from source (below).
 
-### Prerequisites
+## 🎮 The Game
 
-- Python 3.8 or higher
-- Windows, macOS, or Linux
+- **Six areas and two interludes**: the Reef, the Ship Graveyard, the Flooded City, the Volcanic Rift, Atlantis, the NASA Graveyard, the Sunken Lab and the Lab Core. Each has its own look, music, obstacles, enemies and hazards.
+- **Six bosses**, each fought differently: Giant Moray, Giant Squid, Magma Crab, Atlantean Guardian, Rival Shark and Dr. Rask in his walking mech.
+- **A story**: an intro, Dr. Rask's radio taunts and an ending.
+- **A weapon ladder**: laser, shotgun, rapid laser, fan laser and homing laser. Pickups move you up; getting hit knocks you down.
+- **Eleven kinds of enemy**, from laser mantas and pufferfish to hammerheads and evil subs, getting tougher area by area.
+- **Hazards** such as sea mines, depth charges, jellyfish, ink clouds, lava geysers, laser gates and electric cables.
+- **Energy to manage**: it drains all the time, so eat fish to keep going.
+- **High scores** with arcade-style initials, and your best score shown as you play.
+- **Three difficulty levels**, plus an Easy Mode with unlimited laser.
+- **Controller support** and remappable keys.
 
-### Installation
+| | |
+|---|---|
+| ![Fan laser in the Reef](docs/screenshots/reef.png) | ![Fighting the Giant Squid](docs/screenshots/giant-squid.png) |
+| ![The Magma Crab erupts](docs/screenshots/magma-crab.png) | ![Dr. Rask in his mech](docs/screenshots/dr-rask.png) |
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/yourusername/lazer-shark-arcade.git
-   cd lazer-shark-arcade
-   ```
+## 🕹️ How to Play
 
-2. **Create a virtual environment:**
-   ```bash
-   python -m venv venv
-   ```
-
-3. **Activate the virtual environment:**
-   - **Windows:**
-     ```bash
-     venv\Scripts\activate
-     ```
-   - **macOS/Linux:**
-     ```bash
-     source venv/bin/activate
-     ```
-
-4. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-5. **Run the game:**
-   ```bash
-   python main.py
-   ```
-
-## 🎯 How to Play
-
-### 🕹️ Default Controls
+### Controls
 
 | Action | Keyboard | Controller |
 |--------|----------|------------|
-| Move | Arrow Keys | Left Stick |
-| Fire Laser | Space | A Button |
-| Fire Missile | Left Alt | B Button |
-| Fire Torpedo | Left Ctrl | X Button |
-| Pause | P | Start Button |
-| Restart Game (Game Over) | Any Key | Any Button (except Start) |
-| Quit | Escape | Start Button (Game Over) |
+| Move | Arrow keys | Left stick |
+| Fire | Space | A |
+| Pause | P | Start |
+| Quit | Esc | |
+| Full screen | F11 | |
 
-### 🎮 Gameplay Mechanics
+Keys can be remapped in Settings. The controller is off until you switch it on there.
 
-#### Weapons
-- **🔴 Laser**: Fast-firing energy weapon (requires energy)
-- **🟠 Missile**: Powerful explosive projectile (limited ammo)
-- **🔵 Torpedo**: Homing weapon that tracks nearest obstacle (limited ammo)
+On the title screen, **S** opens Settings and **1-6** jump straight to a boss for practice.
 
-#### Energy System
-- Energy depletes while moving and firing lasers
-- Eat small fish to restore energy
-- Running out of energy means game over!
+### Tips
 
-#### High Scores
-- The best 10 runs are kept, with three-letter initials and the difficulty they were played on
-- Make the table and you enter your initials on the Game Over screen: arrows or a D-pad to pick letters, or just type them
-- The title screen takes turns with the table
-- Runs started by jumping to a boss, or played in Easy Mode, are practice and aren't recorded
-- Scores are saved in `high_scores.json`, beside `game_settings.json`
+- **Energy** drains slowly, and faster while you move. Each fish gives +20. Grey fish with red X eyes are zombie fish: they bite.
+- **Swimming into the coast** costs energy and pushes you back into the channel.
+- **Weapon upgrades** (yellow hexagons) last 25 seconds. They drift in every 25 seconds, and also come from destroying tough enemies, evil subs and loot in giant wrecks.
+- **Shields** absorb 100 damage for 20 seconds.
+- **Watch for warnings**: red lines, glowing eyes and blinking lights mean something is about to fire, charge or blow up.
+- **Bosses** each have a weak moment, and the game tells you what it is when the fight starts.
 
-#### Obstacles
-- **🪸 Coral Reefs**: Organic obstacles that crack and break
-- **🚢 Shipwrecks**: Metallic obstacles with hollow sounds
-- **🤖 Friendly Submarines**: Avoid these allies!
+### Settings
 
-#### Powerups
-- **🔴 Laser Powerup**: Restores laser energy
-- **🟠 Missile Powerup**: Adds 2 missiles to inventory
-- **🔵 Torpedo Powerup**: Adds 1 torpedo to inventory
-- **🛡️ Shield Powerup**: Temporary invincibility (spawns after destroying 2 identical obstacles)
+Settings has key remapping, the controller switch, Easy Mode, music on or off, music volume and difficulty (Easy, Normal or Hard).
 
-## 🛠️ Game Features
+### High Scores
 
-### 🎵 Audio System
-The game features a complete underwater audio experience with 16 custom sound effects:
-- Weapon firing sounds (laser, missile, torpedo)
-- Material-specific collision sounds (coral, metal, submarine)
-- UI feedback sounds
-- Ambient ocean atmosphere
+- The best 10 runs are kept, with three-letter initials and the difficulty they were played on.
+- If you make the table, enter your initials on the Game Over screen: use the arrows or a D-pad to pick letters, or just type them.
+- During play, your best score shows under your score, and turns into **NEW BEST!** when you pass it.
+- Runs started by jumping to a boss, or played in Easy Mode, are practice and aren't recorded.
 
-### 🎨 Visual Effects
-- **Dynamic underwater background** with depth-based color gradients
-- **Animated water caustics** creating realistic light patterns
-- **Floating bubble particles** for depth perception
-- **Swaying kelp forests** in the background
-- **Particle explosions** for impacts and destructions
+## 🚀 Running from Source
 
-### ⚙️ Customization Options
-- **Key Remapping**: Customize all controls to your preference
-- **Controller Toggle**: Enable/disable gamepad support
-- **Easy Mode**: Unlimited laser energy for casual play
+You need [Python 3.13](https://www.python.org/downloads/) on Windows, macOS or Linux.
 
-## 📁 Project Structure
-
+```bash
+git clone https://github.com/wheidal/LazerShark.git
+cd LazerShark
+python -m venv venv
 ```
-lazer-shark-arcade/
-├── main.py                 # Main game loop and logic
-├── player.py              # Shark player class
-├── obstacle.py            # Obstacle classes (coral, shipwrecks)
-├── food.py               # Fish food class
-├── projectile.py         # Weapon projectile classes
-├── powerup.py            # Powerup classes
-├── particle.py           # Particle effect system
-├── ui.py                 # User interface components
-├── settings.py           # Game configuration
-├── resources.py          # Resource management
-├── requirements.txt      # Python dependencies
-├── sounds/              # Pre-rendered audio files
-│   ├── laser.wav
-│   ├── missile.wav
-│   ├── torpedo.wav
-│   ├── coral_collision.wav
-│   ├── shipwreck_collision.wav
-│   ├── submarine_collision.wav
-│   ├── fatal_collision.wav
-│   ├── food_eat.wav
-│   ├── powerup_collect.wav
-│   ├── shield_activate.wav
-│   ├── obstacle_destroy.wav
-│   ├── menu_beep.wav
-│   ├── upgrade_activate.wav
-│   ├── ambient_ocean.wav
-│   └── ...
-├── assets/              # Game sprites and images
-└── README.md           # This file
+
+Activate the virtual environment, with `venv\Scripts\activate` on Windows or `source venv/bin/activate` on macOS and Linux. Then:
+
+```bash
+pip install -r requirements.txt
+python main.py
 ```
+
+When run from source, settings and high scores are saved beside the code, in `game_settings.json` and `high_scores.json`. The installed game saves them in `%APPDATA%\LazerSharkKillKill`.
 
 ## 🔧 Development
 
-### 🏗️ Architecture
+### Project Structure
 
-The game follows a modular design pattern:
-- **Component-based entities** for game objects
-- **Sprite groups** for efficient collision detection
-- **Event-driven input system** supporting multiple input methods
-- **Particle system** for visual effects
-- **Audio manager** with pre-rendered sound effects
+```
+main.py              Game loop, menus and state
+attract.py           Title screen demo and briefing pages
+areas.py             The areas and interludes
+channel.py           The scrolling coast and its zones
+boss.py, bosses.py   The boss fights and the boss roster
+enemies.py           Enemy types, spawning and toughening
+obstacle.py          Obstacles, mines, barrels and jellyfish
+hazards.py           Radiation, whirlpools and fields
+features.py          Lava geysers, laser gates and electric cables
+giant_wreck.py       Giant wrecks
+weapons.py           The weapon ladder and its shots
+food.py, powerup.py  Fish and pickups
+highscores.py        High-score table and initials entry
+story.py, cutscenes.py  Radio taunts, intro and ending
+music.py             Music
+hud.py               Energy, shield, laser and score display
+settings_manager.py, resources.py  Settings and file paths
+sounds/              Sound effects, and music in sounds/music/
+tools/make_audio.py  Writes the placeholder music and sounds
+tests/               Tests that play the real game without a window
+```
 
-### 🎵 Audio System
+[`shark_laser_arcade_spec.md`](shark_laser_arcade_spec.md) is the full design: every area, boss, enemy, hazard and number, plus what's still to do.
 
-The game originally used procedural audio generation with NumPy, but has been optimized to use pre-rendered WAV files for:
-- Better performance
-- Improved compatibility
-- Easier audio editing and customization
+### Tests
+
+The tests run the real game without a window or sound. They need Python 3.13:
+
+```bash
+pip install pytest
+python -m pytest -q
+```
+
+The full run takes about 5-7 minutes.
 
 ### 📦 Building for Windows
 GitHub builds the Windows installer for you (`.github/workflows/windows-build.yml`):
@@ -195,56 +147,31 @@ The installer isn't digitally signed, so Windows warns that it's from an unknown
 
 ### 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+Contributions are welcome. For anything big, please open an issue first to talk it over.
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+1. Fork the repository.
+2. Create a branch (`git checkout -b feature/my-idea`).
+3. Make your change, and run the tests.
+4. Push the branch and open a pull request.
 
 ## 🐛 Troubleshooting
 
-### Common Issues
-
-#### Pygame Import Error on Windows
-If you encounter DLL load errors with pygame on Python 3.13:
-```bash
-pip uninstall pygame
-pip install pygame --pre
-```
-
-#### Audio Not Working
-Ensure all files in the `sounds/` directory are present. If sounds are missing, the game will continue but audio may be silent.
-
-#### Controller Not Detected
-- Ensure your controller is connected before starting the game
-- Enable controller support in the settings menu
-- The game supports most standard gamepads (Xbox, PlayStation, etc.)
-
-## 📋 Requirements
-
-- **Python**: 3.8+
-- **Pygame**: 2.0+
-- **Operating System**: Windows 10+, macOS 10.14+, or Linux
+- **No sound:** the game runs silently if it can't find an audio device. Check that the files in `sounds/` are there.
+- **Controller does nothing:** switch it on in Settings, and connect it before starting the game. Most Xbox and PlayStation style controllers work.
+- **Window too small:** press F11 for full screen.
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT. See [LICENSE](LICENSE).
 
 ## 🙏 Acknowledgments
 
-- Built with [Pygame](https://www.pygame.org/)
-- Inspired by classic arcade shooters
-- Sound effects generated using procedural audio techniques
-- Special thanks to the Python gaming community
-
-## 📸 Screenshots
-
-*Add screenshots of your game here when available*
+- Built with [Pygame](https://www.pygame.org/).
+- Inspired by classic arcade shooters.
+- The music and sound effects are placeholders, generated by `tools/make_audio.py`.
 
 ---
 
 **Enjoy the underwater mayhem! 🦈💥**
 
-For questions, suggestions, or bug reports, please open an issue on GitHub.
+For questions, ideas or bug reports, please [open an issue](https://github.com/wheidal/LazerShark/issues).
