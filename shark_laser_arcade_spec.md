@@ -1,4 +1,4 @@
-# Lazer Shark Kill! Kill! - Design Specification v3.0
+# Lazer Shark Kill! Kill! - Design Specification v3.1
 
 ## Game Overview
 **"Lazer Shark Kill! Kill!"** is a top-down, vertically scrolling arcade shooter. You play Subject 13, a shark that escaped Dr. Rask's lab with a laser bolted to its head. You swim up a winding channel through six areas, fight a boss at the end of each, and take your revenge on Dr. Rask in the last one.
@@ -271,7 +271,12 @@ The simulation steps at a fixed 60 Hz, so game speed doesn't depend on frame rat
 
 ## 🔄 Version History
 
-### v3.0 (Current)
+### v3.1 (Current)
+- **Best score during play:** shown under your score, turning into NEW BEST! when a recorded run passes it.
+- **Mac builds:** disk images for Apple Silicon and Intel Macs, alongside the Windows installer.
+- **README:** rewritten, with screenshots and an MIT licence.
+
+### v3.0
 - **Journey:** six areas and two interludes, each with its own boss, look, music and hazards.
 - **Bosses:** Giant Moray, Giant Squid, Magma Crab, Atlantean Guardian, Rival Shark and Dr. Rask.
 - **Story:** Dr. Rask's radio taunts, plus intro and ending cutscenes.

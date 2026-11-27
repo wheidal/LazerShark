@@ -9,7 +9,7 @@ import os
 import sys
 
 MAC = sys.platform == 'darwin'
-VERSION = os.environ.get('LAZERSHARK_VERSION', '3.0.0')  # Set by the build scripts
+VERSION = os.environ.get('LAZERSHARK_VERSION', '3.1.0')  # Set by the build scripts
 
 a = Analysis(
     ['main.py'],

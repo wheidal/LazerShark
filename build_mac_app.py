@@ -4,7 +4,7 @@ Builds Lazer Shark Kill! Kill! for the Mac: the .app and a disk image (.dmg) to 
 Run on a Mac, from the project folder, with the build requirements installed:
 
     pip install -r requirements.txt -r requirements_build.txt
-    python build_mac_app.py [--version 3.0.0] [--smoke-test]
+    python build_mac_app.py [--version 3.1.0] [--smoke-test]
 
 The app is built for the Mac it runs on: Apple Silicon (arm64) or Intel (x86_64).
 GitHub Actions builds both. Everything lands in dist/. The script exits with an error
